@@ -1,17 +1,53 @@
 {
   "name": "csv-anomaly-profiler",
-  "version": "0.0.0",
-  "description": "Profile CSV data for outliers, missingness and unexpected category values.",
+  "version": "0.1.0",
+  "description": "Stream a delimited file and report missingness, robust numeric outliers, unexpected category values and drift against an optional baseline.",
   "type": "module",
   "engines": {
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --test"
+    "lint": "node --check src/text.mjs && node --check src/rules.mjs && node --check src/stats.mjs && node --check src/csv.mjs && node --check src/config.mjs && node --check src/baseline.mjs && node --check src/profile.mjs && node --check src/index.mjs && node --check bin/csv-anomaly-profiler.mjs && node --check test/helpers.mjs && node --check test/acceptance.test.mjs && node --check test/bounds.test.mjs && node --check test/cli.test.mjs && node --check test/csv.test.mjs && node --check test/honesty.test.mjs && node --check test/ordering.test.mjs && node --check test/parse.test.mjs && node --check test/sanitise.test.mjs && node --check test/schema.test.mjs && node --check test/severity.test.mjs && node --check test/stats.test.mjs",
+    "test": "node --test",
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-include=src/**",
+    "example": "node bin/csv-anomaly-profiler.mjs --csv examples/clean/orders.csv --baseline examples/clean/baseline.json",
+    "example:failing": "node bin/csv-anomaly-profiler.mjs --csv examples/anomalous/orders.csv --baseline examples/anomalous/baseline.json; test $? -eq 1",
+    "example:incomplete": "node bin/csv-anomaly-profiler.mjs --csv examples/incomplete/readings.csv; test $? -eq 2",
+    "pack:check": "npm pack --dry-run",
+    "check": "npm run lint && npm test && npm run example && npm run example:failing && npm run example:incomplete && npm run pack:check"
   },
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/edilec/csv-anomaly-profiler"
-  }
+    "url": "git+https://github.com/edilec/csv-anomaly-profiler.git"
+  },
+  "bin": {
+    "csv-anomaly-profiler": "./bin/csv-anomaly-profiler.mjs"
+  },
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "examples",
+    "docs",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "csv",
+    "data-quality",
+    "outliers",
+    "profiling",
+    "drift",
+    "audit",
+    "cli"
+  ],
+  "author": "Edilec Private Limited",
+  "bugs": {
+    "url": "https://github.com/edilec/csv-anomaly-profiler/issues"
+  },
+  "homepage": "https://github.com/edilec/csv-anomaly-profiler#readme"
 }

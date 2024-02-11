@@ -1,24 +1,298 @@
-# CSV Anomaly Profiler
+# csv-anomaly-profiler
 
-Profile CSV data for outliers, missingness and unexpected category values.
+Stream a delimited file and report what its columns look like: how much is
+missing, which numbers sit outside a robust fence, which category values a
+baseline does not permit, and how far the column has drifted from that baseline.
 
 - **Repository:** [edilec/csv-anomaly-profiler](https://github.com/edilec/csv-anomaly-profiler)
 - **Area:** Data & Analytics
 - **License:** MIT
 
-## Scope
+## Why it exists
 
-This repository is a focused Edilec engineering utility. Its implementation, tests, usage examples, release notes, and security guidance will be kept in this repository as the tool is built. It does not contain client work, production data, credentials, or copied source from another project.
+A profiler is easy to write and easy to write dishonestly. The dishonest version
+computes a median over whatever parsed, places a fence around it, finds nothing
+outside, and prints a clean column. It has told you nothing and made it look like
+something, and the next person reads the green output as evidence.
+
+So this tool **refuses**, out loud, in three situations:
+
+| Situation | Why a verdict would be worthless |
+| --- | --- |
+| Fewer values than `minSample` | An order statistic over a handful of points is not a description of a distribution |
+| A deviation of zero | The score becomes a division by zero, which reports every value that is not the median as outlying: a confident answer produced by arithmetic rather than by evidence |
+| A column that is part numbers and part text | A fence computed from the rows that happen to parse describes a column that does not exist |
+
+Each refusal is a finding with a reason, the column is marked `undetermined`, and
+the run exits 2. That is the whole point: the absence of an outlier finding must
+never be readable as the absence of an outlier.
+
+The same rule governs the baseline comparison. With no baseline, this tool makes
+no claim about drift or about unexpected values at all -- not "no drift", not
+"nothing unexpected". It does not answer a question nobody gave it the evidence
+for.
+
+## Quick start
+
+```sh
+# A file that matches its baseline: every column gets the verdict it was asked
+# for and none of them fails a threshold.
+node bin/csv-anomaly-profiler.mjs \
+  --csv examples/clean/orders.csv \
+  --baseline examples/clean/baseline.json
+# exit 0, status "pass"
+
+# The same shape with a planted outlier, a category the baseline does not list,
+# and a column that started going missing.
+node bin/csv-anomaly-profiler.mjs \
+  --csv examples/anomalous/orders.csv \
+  --baseline examples/anomalous/baseline.json
+# exit 1, status "fail"
+
+# Six rows and a column that is part letters: neither supports a verdict.
+node bin/csv-anomaly-profiler.mjs --csv examples/incomplete/readings.csv
+# exit 2, status "incomplete"
+```
+
+`stdout` carries the JSON report and nothing else, so it pipes straight into a
+parser. The human summary goes to `stderr`, and `--json` silences it.
+
+## Input: the file
+
+Comma separated, UTF-8, RFC 4180 quoting, first line the header. It is read in
+one pass, holding one row and a bounded set of values at a time.
+
+Three ambiguous shapes, and what this reader does with each:
+
+| Shape | Reading |
+| --- | --- |
+| `ab"cd` | An ordinary character. A quote opens a field only at its start, so the grammar gives it no other meaning |
+| `"ab"c` | No reading at all. The row is reported as malformed and is **not profiled** |
+| A lone `CR` | An ordinary character. Treating it as a record separator would split a value that legitimately holds one |
+
+A row whose field count does not match the header is **not** spread across the
+columns on a guess about which field is missing: it is reported and skipped.
+
+A header name must print exactly as it is stored and be at most 128 characters.
+`a<U+0001>b` and `a b` print the same and are two different columns, so accepting
+the first would silently merge them; instead the run stops.
+
+## Input: the baseline
+
+```json
+{
+  "schemaVersion": "1",
+  "source": "orders-week-11",
+  "columns": {
+    "region": {
+      "missingRate": 0.0,
+      "allowed": ["north", "south", "east"],
+      "categories": { "north": 0.3333, "south": 0.3333, "east": 0.3334 }
+    },
+    "units": { "missingRate": 0.0 }
+  }
+}
+```
+
+- `allowed` is the permitted category set. A value observed and not listed is an
+  `unexpected-category`.
+- `categories` are prior shares and must sum to 1 within 0.001. A set of shares
+  that is not a distribution would give a distance with no meaning.
+- `missingRate` is the prior rate, compared against the observed one.
+
+The baseline is the **index** every comparison is made against, so an entry that
+could not be used is refused when the document is read -- never dropped quietly.
+Evidence dropped while building an index makes every comparison against it
+incomplete; it does not make the comparison clean.
+
+A column the baseline does not mention raises `baseline-entry-missing`, and a
+baseline column the file does not have raises `baseline-column-absent`. Both make
+the run incomplete: a comparison you asked for and did not get is a gap, not a
+pass.
+
+## Input: the configuration
+
+```json
+{
+  "schemaVersion": "1",
+  "method": "mad",
+  "minSample": 12,
+  "outlierThreshold": 3.5,
+  "iqrMultiplier": 1.5,
+  "maxMissingRate": 0.2,
+  "maxMissingRateDrift": 0.1,
+  "maxCategoryDrift": 0.2,
+  "maxExamples": 8,
+  "missingTokens": [""],
+  "limits": { "maxRows": 20000 }
+}
+```
+
+Every key is optional except `schemaVersion`, and **an unknown key is refused**
+rather than ignored: a one-character typo in a threshold must not turn a real
+failure into a green run.
+
+## Methods
+
+| Method | Centre | Dispersion | A value is outside when |
+| --- | --- | --- | --- |
+| `mad` | median | median absolute deviation | the modified z-score, `0.6745 * (x - median) / mad`, exceeds `outlierThreshold` (default 3.5) |
+| `iqr` | median | interquartile range | it falls outside `[q1 - k*iqr, q3 + k*iqr]`, `k` being `iqrMultiplier` (default 1.5) |
+
+Quantiles use linear interpolation between the closest ranks -- the definition R
+calls type 7 and NumPy calls `linear`. It is named because different definitions
+put a fence in a different place, and the number in the report has to be
+re-derivable.
+
+The two methods genuinely disagree, which is why `--method` exists and why the
+report records which one ran. Fifteen values from 10 to 24 with one at 36: the
+interquartile fence ends at 32.5 and reports it, while the median absolute
+deviation puts it at a modified z-score of 3.12, inside the default threshold.
+
+## Column types
+
+| Type | Meaning |
+| --- | --- |
+| `numeric` | every value examined read as a number |
+| `categorical` | none of them did |
+| `mixed` | some did and some did not. No numeric verdict is reported |
+| `undetermined` | no value was examined at all |
+
+## Rules
+
+| Rule | Severity | Raised when |
+| --- | --- | --- |
+| `baseline-column-absent` | error | the baseline describes a column the file does not have |
+| `baseline-entry-missing` | warning | the file has a column the baseline says nothing about |
+| `categories-truncated` | warning | a column holds more distinct values than `maxDistinctCategories` |
+| `category-comparison-incomplete` | warning | a value could not be added to the index the comparison uses |
+| `category-drift` | error | the distribution is further from the baseline than `maxCategoryDrift` |
+| `column-limit-exceeded` | error | the header declares more columns than `maxColumns` |
+| `column-mixed-types` | warning | a column is part numbers and part text |
+| `column-not-evaluable` | warning | a column had rows and no value was examined |
+| `csv-empty` | error | the file holds no header row |
+| `csv-not-utf8` | error | the bytes are not valid UTF-8 |
+| `csv-too-large` | error | the file is over `maxBytes` |
+| `csv-unreadable` | error | the file could not be opened |
+| `csv-unterminated-quote` | error | a quoted field was left open at the end of the file |
+| `dispersion-degenerate` | warning | the deviation is zero, so no fence can be placed |
+| `drift-undetermined` | warning | the observed index dropped a value, so no distance is reported |
+| `duplicate-column` | error | the header uses one name twice |
+| `examples-limited` | info | more outliers or unexpected values than the report lists. The count stays exact |
+| `field-too-long` | warning | a value is longer than `maxFieldLength` and was not read |
+| `header-column-unusable` | error | a header name would not print as it is stored, or is too long |
+| `missingness-above-threshold` | error | a column is missing more often than `maxMissingRate` |
+| `missingness-drift` | error | the missing rate moved further than `maxMissingRateDrift` |
+| `no-rows-profiled` | error | no data row was profiled, so the run establishes nothing |
+| `numeric-outlier` | error | a value is outside the fence the selected method placed |
+| `row-field-count-mismatch` | error | a row does not hold the fields the header declares |
+| `row-limit-exceeded` | error | the file holds more data rows than `maxRows` |
+| `row-malformed` | error | a row could not be read as delimited text |
+| `sample-too-small` | warning | fewer values than `minSample` were examined |
+| `unexpected-category` | error | a value was seen that the baseline does not list |
+| `value-unprintable` | warning | a value carries a control or formatting character |
+
+Every warning above is in the unsettled set, so it produces `incomplete` and exit
+2 rather than a green run. The five positive findings -- `numeric-outlier`,
+`unexpected-category`, `missingness-above-threshold`, `missingness-drift` and
+`category-drift` -- are deliberately not: each is a statement about evidence the
+run did obtain, which is a policy failure and not a gap.
+
+## Exit codes
+
+| Code | Meaning |
+| ---: | --- |
+| `0` | every column got the verdict it was asked for and none failed a threshold |
+| `1` | the run completed and a column failed a threshold |
+| `2` | invalid configuration or baseline, or evidence the run could not obtain |
+
+Exit 2 has two shapes, and the difference matters to anything that pipes stdout:
+
+| Situation | stdout | stderr |
+| --- | --- | --- |
+| invalid configuration or baseline, unknown option, bad usage | **empty** | the message |
+| a file that could not be read or decoded, or a question left open | an `incomplete` report | optional diagnostics |
+
+## Limits
+
+Each limit is enforced **before** the work it bounds. The file size is taken from
+the file system before anything is opened and counted again as the bytes arrive;
+the row, column and field bounds stop the reader rather than trimming its result;
+and two products are checked while the configuration is validated, before a file
+is opened, so that a file this tool calls legal cannot exhaust memory:
+
+- `maxRows` multiplied by `maxColumns` may not exceed 2000000 retained values
+- `maxColumns` multiplied by `maxDistinctCategories` and `maxCategoryLength` may
+  not exceed 33554432 retained characters
+
+| Limit | Default | Ceiling |
+| --- | ---: | ---: |
+| `maxBytes` | 33554432 | 134217728 |
+| `maxRows` | 20000 | 200000 |
+| `maxColumns` | 100 | 1024 |
+| `maxFieldLength` | 8192 | 65536 |
+| `maxDistinctCategories` | 512 | 4096 |
+| `maxCategoryLength` | 128 | 1024 |
+
+| Setting | Default | Range |
+| --- | ---: | --- |
+| `minSample` | 12 | 4 to 100000 |
+| `outlierThreshold` | 3.5 | above 0, to 100 |
+| `iqrMultiplier` | 1.5 | above 0, to 100 |
+| `maxMissingRate` | 0.2 | 0 to 1 |
+| `maxMissingRateDrift` | 0.1 | 0 to 1 |
+| `maxCategoryDrift` | 0.2 | 0 to 1 |
+| `maxExamples` | 8 | 1 to 100 |
+
+Fixed, and not configurable: the configuration document is capped at 65536 bytes,
+the baseline at 1048576, `missingTokens` at 16 entries, a header name at 128
+characters, and a column entry shows at most 10 category values.
+
+Exceeding any limit is an `incomplete` result with a finding naming the limit. It
+is never a silent truncation and never a pass. The one exception is
+`examples-limited`, which is `info` because the **count** stays exact and only the
+listing is shortened.
+
+A category index is only built for a column the baseline declares `allowed` or
+`categories` for. A numeric column with twenty thousand distinct values would
+otherwise fill an index nobody asked for and report it as truncated.
+
+## Non-goals
+
+- **It connects to nothing.** No database, no warehouse, no host, no network call
+  of any kind, in the tool or in its tests. The input is a file somebody exported.
+- **It writes no file.** The report goes to stdout. There is no `--out`, no
+  auto-fix and no destination to get wrong.
+- **It reads no clock.** No wall-clock time, locale or filesystem order reaches
+  the output; two runs over one file produce byte-identical stdout.
+- **It is not a statistical test.** There is no hypothesis, no model, no
+  significance and no interval. A value outside a fence is a value outside a
+  fence, computed from the other values in its own column.
+- **It does not say a value is wrong.** A point outside a fence may be the
+  interesting part of the data. What to do about it is a question about the data,
+  and the file does not answer it.
+- **Comma separated only.** Other delimiters, other quote characters and files
+  with no header are not read, and are not guessed at.
+- **Whole-value numerics only.** `1,234` is two fields to a reader of this format
+  and a thousands separator to a person; this tool does not choose between them.
 
 ## Repository layout
 
-- `src/` — implementation
-- `test/` — deterministic tests and fixtures
-- `docs/` — design notes, limits, and usage guidance
+- `src/` — the library: text boundary, rule catalog, order statistics, the
+  streaming reader, configuration, baseline, column profile, report assembly
+- `bin/` — the command-line entry point
+- `examples/` — three runnable corpora: passing, failing and incomplete
+- `test/` — `node:test` suites covering the acceptance criteria item by item
+- `docs/` — design notes
 
 ## Development
 
-The first implementation should document its input contract, output contract, limits, failure behavior, and verification command before a release is made.
+```sh
+npm run check   # lint, tests, all three examples, and a packaging dry run
+```
+
+Zero runtime dependencies and zero development dependencies: Node's own test
+runner and assertion library, and nothing else.
 
 ## License
 
