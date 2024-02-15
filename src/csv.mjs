@@ -6,19 +6,27 @@
  * bound stops being accumulated and is marked truncated rather than kept, which
  * is the difference between a bound and a hope.
  *
- * Three decisions about ambiguous input, written down because each one is a
- * place a reader could invent something:
+ * Three decisions about input RFC 4180 does not describe, written down because
+ * each one is a place a reader could invent something. Two of them are
+ * DEVIATIONS from the specification, said plainly rather than dressed up as
+ * what the grammar meant:
  *
- * 1. A quote only opens a field at its start. RFC 4180 gives the quote meaning
- *    only in that position, so a quote inside an unquoted field is an ordinary
- *    character and is kept as one.
- * 2. Text after a closing quote -- `"ab"c` -- has no reading in the grammar. It
- *    is reported as a malformed row and the row is not profiled, rather than
- *    guessed at.
- * 3. A record ends at LF or CRLF. A lone CR is an ordinary character, because
- *    treating it as a record separator would silently split a value that
- *    legitimately contains one. It will be reported later as a value that does
- *    not print as it is stored.
+ * 1. `ab"cd`. RFC 4180 does not permit this: its `non-escaped` production
+ *    excludes DQUOTE, so a strict reader refuses the row. This one keeps the
+ *    quote as a literal character, because there is only one reading available
+ *    -- the field did not open with a quote, so no quote inside it can be
+ *    closing one -- and refusing would report a defect on a file that carries
+ *    exactly the data it appears to carry.
+ * 2. `"ab"c`. Here the grammar really does run out: after a closing DQUOTE only
+ *    a COMMA or a line ending may follow, and the two readings of `c` differ in
+ *    what the data IS. The row is reported as malformed and is not profiled.
+ * 3. A lone CR. RFC 4180 excludes CR from `non-escaped` too, so this is the
+ *    second deviation: it is kept as data rather than treated as a record
+ *    separator, because treating it as one would split a row on a character
+ *    that may well be inside a value. The value is then reported later as one
+ *    that does not print as it is stored, so it is never silently profiled.
+ *
+ * Both deviations are in the README, under the shapes this reader accepts.
  */
 
 const QUOTE = '"'
@@ -122,7 +130,7 @@ export function createCsvReader({ maxFieldLength, maxColumns, onRow, onProblem }
           finishRow()
           continue
         }
-        // A lone CR: an ordinary character, kept as one.
+        // A lone CR: kept as data. See the deviation note at the top.
         append(CR)
         state = 'in-field'
         position -= 1

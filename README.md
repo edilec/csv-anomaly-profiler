@@ -62,13 +62,15 @@ parser. The human summary goes to `stderr`, and `--json` silences it.
 Comma separated, UTF-8, RFC 4180 quoting, first line the header. It is read in
 one pass, holding one row and a bounded set of values at a time.
 
-Three ambiguous shapes, and what this reader does with each:
+Three shapes RFC 4180 does not describe, and what this reader does with each.
+Two of them are **deviations** from the specification, said plainly rather than
+dressed up as what the grammar meant:
 
-| Shape | Reading |
-| --- | --- |
-| `ab"cd` | An ordinary character. A quote opens a field only at its start, so the grammar gives it no other meaning |
-| `"ab"c` | No reading at all. The row is reported as malformed and is **not profiled** |
-| A lone `CR` | An ordinary character. Treating it as a record separator would split a value that legitimately holds one |
+| Shape | Reading | Standing |
+| --- | --- | --- |
+| `ab"cd` | Kept as a literal quote character | A deviation. RFC 4180's `non-escaped` production excludes `"`, so a strict reader refuses the row. This one accepts it, because the field did not open with a quote and so no quote inside it can be closing one: only one reading of the data is available |
+| `"ab"c` | The row is reported as malformed and is **not profiled** | The grammar really does run out here -- after a closing quote only a comma or a line ending may follow -- and the two readings of `c` differ in what the data IS |
+| A lone `CR` | Kept as data, not a record separator | A deviation, for the same reason: `non-escaped` excludes `CR`. Keeping it costs nothing, because a value that does not print as it is stored is reported as `value-unprintable` and is never examined |
 
 A row whose field count does not match the header is **not** spread across the
 columns on a guess about which field is missing: it is reported and skipped.

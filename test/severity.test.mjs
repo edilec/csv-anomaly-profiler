@@ -50,17 +50,23 @@ test('an error finding is exit 1, and that is what "error" means here', async ()
   assert.equal(result.code, 1)
 })
 
-test('an info finding alone is exit 0, and the count it reports is still exact', async () => {
-  // Three values outside the fence and a listing capped at two: the count is
-  // complete, so nothing is missing and nothing is unsettled.
+test('an info finding is information, not a gap: it leaves the status to the other findings', async () => {
+  // Three values outside the fence and a listing capped at two. The COUNT is
+  // complete, so nothing about the evidence is missing: the shortened listing
+  // must not turn the run incomplete, and the outliers beside it must still
+  // fail it.
   const values = [...STEADY]
   values[3] = 400
   values[7] = 500
   values[13] = 600
-  const { report } = await runOn(readings(values), { config: { maxExamples: 2 } })
+  const { result, report } = await runOn(readings(values), { config: { maxExamples: 2 } })
   const kinds = report.findings.map((finding) => finding.ruleId)
   assert.deepEqual(kinds.filter((kind) => kind === 'examples-limited'), ['examples-limited'])
   assert.equal(report.findings.find((finding) => finding.ruleId === 'examples-limited').severity, 'info')
+  assert.equal(report.status, 'fail')
+  assert.equal(result.code, 1)
+  // And on its own it is a pass: this is the only rule in the catalog that
+  // reports a shortened listing without reporting a shortened count.
   assert.equal(statusFor([{ ruleId: 'examples-limited', severity: 'info' }]), 'pass')
 })
 

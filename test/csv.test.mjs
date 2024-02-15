@@ -50,9 +50,11 @@ test('a trailing newline does not invent a final empty row, and a blank line is 
   assert.equal(parse('a\n1\n\n').rows[2].count, 1)
 })
 
-test('a quote inside an unquoted field is an ordinary character, because the grammar gives it no other reading', () => {
-  // RFC 4180 gives the quote meaning only at the start of a field, so this is
-  // not ambiguous and is not reported as malformed.
+test('a quote inside an unquoted field is kept as data: a documented deviation, not a reading of the grammar', () => {
+  // RFC 4180 does NOT permit this -- its `non-escaped` production excludes
+  // DQUOTE -- so a strict reader would refuse the row. This reader accepts it,
+  // because the field did not open with a quote and so no quote inside it can
+  // be closing one: there is only one reading of the data available.
   const parsed = parse('a\nab"cd\n')
   assert.deepEqual(parsed.rows[1].fields, ['ab"cd'])
   assert.equal(parsed.rows[1].malformed, false)
@@ -72,7 +74,11 @@ test('a quote left open at the end of the file is reported, not silently closed'
   assert.equal(parsed.rows[1].malformed, true)
 })
 
-test('a lone carriage return stays inside the value instead of splitting it', () => {
+test('a lone carriage return is kept as data, and the value is then reported as unprintable', () => {
+  // The second deviation from RFC 4180, which excludes CR from `non-escaped`
+  // as well. Keeping it costs nothing because the profiler refuses to examine
+  // a value that does not print as it is stored, so it can never be counted as
+  // an ordinary category.
   const parsed = parse('a\nx\ry\n')
   assert.equal(parsed.rows.length, 2)
   assert.deepEqual(parsed.rows[1].fields, ['x\ry'])
