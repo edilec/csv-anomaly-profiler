@@ -436,10 +436,16 @@ function columnReport(column, config, baseline, file) {
   }
 
   if (baselineEntry !== undefined) {
-    drift = { compared: true, reason: null, missingRate: null, categories: null }
+    // `compared` says whether a comparison was actually made, not whether an
+    // entry existed to make one from. A baseline entry that declares nothing
+    // compares nothing, and reporting that as compared would be the quiet half
+    // of a claim this run cannot support.
+    drift = { compared: false, reason: 'baseline-entry-declares-nothing', missingRate: null, categories: null }
     if (baselineEntry.missingRate !== null && missingRate !== null) {
       const delta = num(Math.abs(missingRate - baselineEntry.missingRate))
       drift.missingRate = { baseline: baselineEntry.missingRate, observed: missingRate, delta }
+      drift.compared = true
+      drift.reason = null
       if (delta > config.maxMissingRateDrift) {
         findings.push(makeFinding(
           'missingness-drift',
@@ -510,6 +516,8 @@ function columnReport(column, config, baseline, file) {
         if (indexComplete) {
           const distance = categoryDistance(column, baselineEntry.categories)
           drift.categories = { distance, threshold: config.maxCategoryDrift }
+          drift.compared = true
+          drift.reason = null
           if (distance !== null && distance > config.maxCategoryDrift) {
             findings.push(makeFinding(
               'category-drift',

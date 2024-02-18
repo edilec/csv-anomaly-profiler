@@ -112,6 +112,11 @@ baseline column the file does not have raises `baseline-column-absent`. Both mak
 the run incomplete: a comparison you asked for and did not get is a gap, not a
 pass.
 
+Every key inside an entry is optional, and the column's `drift.compared` reports
+whether a comparison was actually made rather than whether an entry existed to
+make one from. An entry that declares nothing compares nothing, and the report
+says so.
+
 ## Input: the configuration
 
 ```json

@@ -51,6 +51,32 @@ test('a column the baseline says nothing about is a gap, and the gap changes the
   assert.equal(report.status, 'incomplete')
 })
 
+test('a baseline entry that declares nothing compares nothing, and says so', async () => {
+  // An entry exists, so there is no gap to report -- and nothing in it was
+  // compared, so the column entry must not read as a comparison that passed.
+  const report = await profileText(regions(['north', 'south']), {
+    baseline: { columns: { id: {}, region: {} } },
+  })
+  const region = columnNamed(report, 'region')
+  assert.equal(region.drift.compared, false)
+  assert.equal(region.drift.reason, 'baseline-entry-declares-nothing')
+  assert.equal(region.categories.tracked, false)
+  assert.equal(region.categories.reason, 'baseline-declares-no-categories')
+  assert.deepEqual(report.findings, [])
+  assert.equal(report.status, 'pass')
+})
+
+test('a baseline entry that declares one comparison reports that one as compared', async () => {
+  const report = await profileText(regions(['north', 'south']), {
+    baseline: { columns: { id: {}, region: { missingRate: 0 } } },
+  })
+  const region = columnNamed(report, 'region')
+  assert.equal(region.drift.compared, true)
+  assert.equal(region.drift.reason, null)
+  assert.equal(region.drift.missingRate.delta, 0)
+  assert.equal(region.drift.categories, null)
+})
+
 test('a baseline column the file does not have is reported, not skipped', async () => {
   const report = await profileText(regions(['north', 'south']), {
     baseline: { columns: { id: {}, region: {}, gone: { missingRate: 0.1 } } },
