@@ -10,6 +10,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { CSV_PROBLEMS, createCsvReader, readCsvText } from '../src/index.mjs'
+import { columnNamed, profileText } from './helpers.mjs'
 
 function parse(text, { maxFieldLength = 64, maxColumns = 8 } = {}) {
   const rows = []
@@ -74,7 +75,7 @@ test('a quote left open at the end of the file is reported, not silently closed'
   assert.equal(parsed.rows[1].malformed, true)
 })
 
-test('a lone carriage return is kept as data, and the value is then reported as unprintable', () => {
+test('a lone carriage return is kept as data, and the value is then reported as unprintable', async () => {
   // The second deviation from RFC 4180, which excludes CR from `non-escaped`
   // as well. Keeping it costs nothing because the profiler refuses to examine
   // a value that does not print as it is stored, so it can never be counted as
@@ -83,6 +84,14 @@ test('a lone carriage return is kept as data, and the value is then reported as 
   assert.equal(parsed.rows.length, 2)
   assert.deepEqual(parsed.rows[1].fields, ['x\ry'])
   assert.equal(parsed.rows[1].malformed, false)
+
+  // The second half of the sentence, which the reader alone does not show: the
+  // profiler counts that value out of the examination and says so.
+  const report = await profileText('id,note\nR-1,x\ry\nR-2,plain\n')
+  assert.equal(columnNamed(report, 'note').values.unprintable, 1)
+  assert.equal(columnNamed(report, 'note').values.examined, 1)
+  assert.ok(report.findings.some((finding) => finding.ruleId === 'value-unprintable'))
+  assert.equal(report.status, 'incomplete')
 })
 
 test('a field longer than the bound stops being accumulated and is marked, not kept', () => {

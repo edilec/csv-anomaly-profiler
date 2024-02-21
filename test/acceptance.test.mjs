@@ -105,6 +105,10 @@ test('the method actually changes the verdict, so "the selected method" means so
   const byIqr = columnNamed(await profileText(readings(spread), { method: 'iqr' }), 'reading')
   assert.equal(byMad.numeric.outlierCount, 0)
   assert.equal(byMad.numeric.dispersion, 4)
+  // 0.6745 * (36 - 17.5) / 4 = 3.119875, which the README quotes as 3.12. The
+  // number is pinned here so the documented example cannot drift from the code.
+  assert.equal(byMad.numeric.median, 17.5)
+  assert.equal(Math.round(0.6745 * (36 - 17.5) / 4 * 100) / 100, 3.12)
   assert.equal(byIqr.numeric.outlierCount, 1)
   assert.equal(byIqr.numeric.dispersion, 7.5)
   assert.equal(byIqr.numeric.examples[0].value, 36)
