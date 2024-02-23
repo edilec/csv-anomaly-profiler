@@ -73,6 +73,20 @@ test('the same outlier is detected under the iqr method, which is a different fe
   assert.equal(reading.numeric.constant, null)
   assert.ok(reading.numeric.fences.high < 500)
   assert.equal(report.status, 'fail')
+
+  // The finding says what this method measured, and does not quote a threshold
+  // that multiplies the interquartile range beside a score that counts
+  // interquartile ranges past the fence: those are two different quantities.
+  const message = findingsFor(report, 'numeric-outlier')[0].message
+  assert.ok(message.includes('outside the interquartile fence of'))
+  assert.ok(message.includes('interquartile range or ranges'))
+  assert.equal(message.includes('modified z-score'), false)
+
+  const byMad = await profileText(readings(values), { method: 'mad' })
+  const madMessage = findingsFor(byMad, 'numeric-outlier')[0].message
+  assert.ok(madMessage.includes('whose modified z-score against the column median is'))
+  assert.ok(madMessage.includes('past the configured 3.5'))
+  assert.equal(madMessage.includes('interquartile'), false)
 })
 
 test('the method actually changes the verdict, so "the selected method" means something', async () => {

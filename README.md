@@ -146,6 +146,12 @@ failure into a green run.
 | `mad` | median | median absolute deviation | the modified z-score, `0.6745 * (x - median) / mad`, exceeds `outlierThreshold` (default 3.5) |
 | `iqr` | median | interquartile range | it falls outside `[q1 - k*iqr, q3 + k*iqr]`, `k` being `iqrMultiplier` (default 1.5) |
 
+Each outlier example carries a `score`, and the two methods measure different
+things with it: under `mad` it is the modified z-score itself, the quantity
+`outlierThreshold` is compared against; under `iqr` it is how far past the fence
+the value lies, counted in interquartile ranges. The finding text says which,
+and never quotes one method's threshold beside the other's score.
+
 Quantiles use linear interpolation between the closest ranks -- the definition R
 calls type 7 and NumPy calls `linear`. It is named because different definitions
 put a fence in a different place, and the number in the report has to be

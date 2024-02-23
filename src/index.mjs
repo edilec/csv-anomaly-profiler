@@ -332,8 +332,8 @@ function columnReport(column, config, baseline, file) {
     findings.push(makeFinding(
       'field-too-long',
       msg`${String(column.oversized)} value or values in ${column.name} are longer than the
-          ${String(config.limits.maxFieldLength)} character field limit, so they were not read and are
-          counted in none of the totals below.`,
+          ${String(config.limits.maxFieldLength)} character field limit, so they were not read. They are
+          counted in the column total and apart from the values that were examined.`,
       at(file, pointer),
       { suggestion: 'Raise limits.maxFieldLength deliberately, or review the long values by hand.' },
     ))
@@ -391,12 +391,19 @@ function columnReport(column, config, baseline, file) {
   }
   if (numeric !== null && numeric.verdict === 'evaluated') {
     for (const example of numeric.examples) {
+      // The two methods report different quantities, and saying so is the point
+      // of naming the method at all. Under `mad` the score IS the statistic the
+      // threshold is compared against. Under `iqr` the threshold multiplies the
+      // interquartile range to place a fence, and the score says how far past
+      // that fence the value lies, in interquartile ranges -- so quoting the
+      // threshold beside it would compare two different quantities.
+      const how = config.method === 'mad'
+        ? `whose modified z-score against the column median is ${example.score}, past the configured ${numeric.threshold}`
+        : `which is outside the interquartile fence of ${numeric.fences.low} to ${numeric.fences.high}, by ${example.score} interquartile range or ranges`
       findings.push(makeFinding(
         'numeric-outlier',
-        msg`Row ${String(example.row)} of ${column.name} holds ${String(example.value)}, which scores
-            ${String(example.score)} against the ${config.method === 'mad' ? 'modified z-score' : 'interquartile fence'}
-            of the column, past the configured ${String(numeric.threshold)}. The median is
-            ${String(numeric.median)} over ${String(examined)} value or values examined.`,
+        msg`Row ${String(example.row)} of ${column.name} holds ${String(example.value)}, ${how}. The
+            median is ${String(numeric.median)} over ${String(examined)} value or values examined.`,
         at(file, pointer),
         { suggestion: 'Look at the row before deciding anything: a point outside a fence may be the interesting part of the data.' },
       ))
@@ -675,7 +682,7 @@ export async function profileCsv({ csv, config: configPath = null, baseline: bas
   if (state.unterminatedQuote) {
     findings.push(makeFinding(
       'csv-unterminated-quote',
-      msg`A quoted field was left open at the end of the file, so the last row could not be read.`,
+      msg`A quoted field was left open at the end of the file, so the last row was not profiled.`,
       at(file, null),
       { suggestion: 'Close the quote, or re-export the file.' },
     ))
