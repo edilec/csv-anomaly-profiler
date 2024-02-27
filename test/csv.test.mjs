@@ -144,3 +144,21 @@ test('the same document split across chunk boundaries parses identically', () =>
     assert.deepEqual(streamed, whole, `split at ${cut}`)
   }
 })
+
+test('a quoted header is read, and an empty header cell is refused', async () => {
+  const quoted = await profileText('"id","region"\nR-1,north\n')
+  assert.deepEqual(quoted.columns.map((column) => column.name), ['id', 'region'])
+
+  const trailing = await profileText('id,region,\nR-1,north,x\n')
+  assert.deepEqual(trailing.findings.map((finding) => finding.ruleId), ['header-column-unusable'])
+  assert.deepEqual(trailing.columns, [])
+  assert.equal(trailing.status, 'incomplete')
+})
+
+test('a data row with more fields than the header is refused, not trimmed to fit', async () => {
+  const report = await profileText('id,region\nR-1,north\nR-2,north,extra\n')
+  assert.equal(report.summary.rowsProfiled, 1)
+  assert.equal(columnNamed(report, 'region').values.total, 1)
+  assert.ok(report.findings.some((finding) => finding.ruleId === 'row-field-count-mismatch'))
+  assert.equal(report.status, 'incomplete')
+})
