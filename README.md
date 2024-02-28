@@ -171,6 +171,39 @@ deviation puts it at a modified z-score of 3.12, inside the default threshold.
 | `mixed` | some did and some did not. No numeric verdict is reported |
 | `undetermined` | no value was examined at all |
 
+## What a column entry carries
+
+```json
+{
+  "name": "units",
+  "index": 3,
+  "pointer": "/columns/units",
+  "type": "numeric",
+  "values": { "total": 24, "missing": 0, "examined": 24, "numeric": 24, "other": 0,
+              "oversized": 0, "unprintable": 0, "categoryOversized": 0 },
+  "missingRate": 0,
+  "numeric": { "verdict": "evaluated", "reason": null, "method": "mad", "examined": 24,
+               "median": 42, "dispersion": 2, "threshold": 3.5, "constant": 0.6745,
+               "fences": null, "outlierCount": 1,
+               "examples": [{ "row": 19, "value": 99999, "score": 33710.49825 }] },
+  "categories": { "tracked": false, "reason": "no-baseline" },
+  "drift": { "compared": false, "reason": "no-baseline", "missingRate": null, "categories": null }
+}
+```
+
+- `values.examined` is the total less everything that was not read: missing,
+  oversized and unprintable. `numeric + other` always equals it.
+- `numeric` is `null` for a categorical column -- there was no numeric question
+  to answer -- and carries `verdict: "undetermined"` with a `reason` for a column
+  that had one and could not support it. An undetermined verdict has **no**
+  `outlierCount`: there is no count to report, so none is reported.
+- `fences` is filled under `iqr` and `null` under `mad`; `constant` the other way
+  round. Each method reports what it actually used.
+- `categories.tracked` is `false` unless the baseline declares `allowed` or
+  `categories` for the column, and `reason` says which of the two reasons applies.
+- `drift.compared` says whether a comparison was made, not whether an entry
+  existed to make one from.
+
 ## Rules
 
 | Rule | Severity | Raised when |
