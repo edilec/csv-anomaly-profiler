@@ -619,15 +619,25 @@ export async function profileCsv({ csv, config: configPath = null, baseline: bas
       const names = []
       for (let position = 0; position < row.fields.length; position += 1) {
         const field = row.fields[position]
-        if (field.truncated || !isUsableName(field.text)) {
+        // Padding around a header is ordinary in an export and RFC 4180 keeps
+        // it in the value, so `id, region` would otherwise refuse a file that
+        // is not wrong in any way a reader would recognise. The spaces are
+        // dropped from the IDENTITY and nothing else is: a name carrying a
+        // control character, a bidi mark, nothing at all, or more characters
+        // than a name may have is still refused, because it cannot be an
+        // identity. Two headers that differ only by padding collapse onto one
+        // name and are caught by the duplicate check on the next line, which is
+        // what makes dropping the padding safe rather than merely convenient.
+        const name = field.text.replace(/^[ \t]+/u, '').replace(/[ \t]+$/u, '')
+        if (field.truncated || !isUsableName(name)) {
           state.headerProblem = { kind: 'unusable', position: position + 1 }
           return false
         }
-        if (names.includes(field.text)) {
-          state.headerProblem = { kind: 'duplicate', name: field.text }
+        if (names.includes(name)) {
+          state.headerProblem = { kind: 'duplicate', name }
           return false
         }
-        names.push(field.text)
+        names.push(name)
       }
       state.header = names
       state.columns = names.map((name, index) => {

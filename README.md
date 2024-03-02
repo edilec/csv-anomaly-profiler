@@ -79,6 +79,12 @@ A header name must print exactly as it is stored and be at most 128 characters.
 `a<U+0001>b` and `a b` print the same and are two different columns, so accepting
 the first would silently merge them; instead the run stops.
 
+Padding around a header is the one exception, because `id, region` is an ordinary
+export and RFC 4180 keeps the space in the value. Leading and trailing spaces and
+tabs are dropped from the column's **identity** and from nothing else -- values
+keep theirs. Two headers that differ only by padding then collapse onto one name
+and are caught as a `duplicate-column`, which is what makes dropping it safe.
+
 ## Input: the baseline
 
 ```json

@@ -162,3 +162,27 @@ test('a data row with more fields than the header is refused, not trimmed to fit
   assert.ok(report.findings.some((finding) => finding.ruleId === 'row-field-count-mismatch'))
   assert.equal(report.status, 'incomplete')
 })
+
+test('a padded header is accepted and two headers that differ only by padding collide', async () => {
+  // `id, region` is an ordinary export and RFC 4180 keeps the space in the
+  // value, so refusing it would report a defect on a file nothing is wrong
+  // with. The padding is dropped from the identity and from nothing else.
+  const padded = await profileText('id, region\nR-1, north\n')
+  assert.deepEqual(padded.columns.map((column) => column.name), ['id', 'region'])
+  // The VALUE keeps its space: only the header identity is trimmed.
+  assert.equal(columnNamed(padded, 'region').values.examined, 1)
+  assert.equal(columnNamed(padded, 'region').type, 'categorical')
+
+  // Which is exactly why dropping it is safe: the two names collapse onto one
+  // and the duplicate check catches them.
+  const collide = await profileText('id,id \nR-1,x\n')
+  assert.deepEqual(collide.findings.map((finding) => finding.ruleId), ['duplicate-column'])
+  assert.deepEqual(collide.columns, [])
+
+  // Nothing else is forgiven: a control character, an empty name and an
+  // over-long name are still refused.
+  for (const header of [`id,a${String.fromCharCode(1)}b`, 'id, ', `id,${'x'.repeat(129)}`]) {
+    const refused = await profileText(`${header}\nR-1,x\n`)
+    assert.deepEqual(refused.findings.map((finding) => finding.ruleId), ['header-column-unusable'], header)
+  }
+})
