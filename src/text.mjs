@@ -204,7 +204,16 @@ export function assertNoForbiddenClaim(text, what) {
   }
 }
 
-/** A message whose literals have been checked and whose values are sanitised. */
+/**
+ * A message whose literals have been checked and whose values are sanitised.
+ *
+ * It is the OUTPUT of `msg` and nothing else should construct one: the class
+ * carries the fact that its literals have already been through the claim check,
+ * and constructing one directly around unchecked prose would assert something
+ * that is not true. It is deliberately NOT checked in the constructor, because
+ * by then the text also holds sanitised values from an untrusted document, and
+ * a document whose field is named `proven_customer` must not stop the run.
+ */
 export class SafeMessage {
   constructor(text) {
     this.text = text
@@ -227,7 +236,16 @@ export function msg(strings, ...values) {
     const literal = strings[index].replace(/\s+/gu, ' ')
     assertNoForbiddenClaim(literal, 'A finding message')
     out += literal
-    if (index < values.length) out += sanitize(values[index])
+    if (index < values.length) {
+      const value = values[index]
+      // A SafeMessage is this tool's own prose that has ALREADY been through
+      // the claim check, so it is inserted verbatim. Everything else came from
+      // a document and is only sanitised. Without this branch, a message built
+      // in two halves would have to interpolate its second half as a value --
+      // and prose interpolated as a value is prose the claim check never sees,
+      // which is the guard failing silently in the direction that matters.
+      out += value instanceof SafeMessage ? value.text : sanitize(value)
+    }
   }
   return new SafeMessage(out)
 }

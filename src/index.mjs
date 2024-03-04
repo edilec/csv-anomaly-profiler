@@ -366,7 +366,10 @@ function columnReport(column, config, baseline, file) {
           ${String(column.other)} that do not. A fence computed from the numeric part would describe a
           column that does not exist, so no numeric verdict is reported for this one.`,
       at(file, pointer),
-      { suggestion: 'Split the column, or correct the values that do not read as numbers.' },
+      {
+        suggestion: 'If the values that do not read as numbers are placeholders, name them in '
+          + 'missingTokens so they count as missing; otherwise split the column or correct them.',
+      },
     ))
   }
   if (numeric !== null && numeric.reason === 'sample-too-small') {
@@ -382,7 +385,7 @@ function columnReport(column, config, baseline, file) {
   if (numeric !== null && numeric.reason === 'dispersion-degenerate') {
     findings.push(makeFinding(
       'dispersion-degenerate',
-      msg`The ${config.method === 'mad' ? 'median absolute deviation' : 'interquartile range'} of
+      msg`The ${config.method === 'mad' ? msg`median absolute deviation` : msg`interquartile range`} of
           ${column.name} is zero, so every value that is not the median would score infinitely far from
           it. No outlier verdict is reported.`,
       at(file, pointer),
@@ -398,8 +401,10 @@ function columnReport(column, config, baseline, file) {
       // that fence the value lies, in interquartile ranges -- so quoting the
       // threshold beside it would compare two different quantities.
       const how = config.method === 'mad'
-        ? `whose modified z-score against the column median is ${example.score}, past the configured ${numeric.threshold}`
-        : `which is outside the interquartile fence of ${numeric.fences.low} to ${numeric.fences.high}, by ${example.score} interquartile range or ranges`
+        ? msg`whose modified z-score against the column median is ${String(example.score)}, past the
+              configured ${String(numeric.threshold)}`
+        : msg`which is outside the interquartile fence of ${String(numeric.fences.low)} to
+              ${String(numeric.fences.high)}, by ${String(example.score)} interquartile range or ranges`
       findings.push(makeFinding(
         'numeric-outlier',
         msg`Row ${String(example.row)} of ${column.name} holds ${String(example.value)}, ${how}. The
@@ -502,7 +507,7 @@ function columnReport(column, config, baseline, file) {
         findings.push(makeFinding(
           'category-comparison-incomplete',
           msg`${String(categories.notIndexed)} value or values in ${column.name} were not added to the
-              index this comparison uses${column.categoriesTruncated ? ', and the index reached its size limit' : ''}.
+              index this comparison uses${column.categoriesTruncated ? msg`, and the index reached its size limit` : msg``}.
               Any value named above was seen and is not in the baseline; whether the column holds others
               is not established by this run.`,
           at(file, pointer),

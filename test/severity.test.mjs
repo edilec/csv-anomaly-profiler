@@ -136,6 +136,19 @@ test('this tool refuses to write a sentence that claims more than a dispersion t
   assert.equal(built.text, 'The column root_cause was profiled.')
 })
 
+test('prose composed in two halves is checked in both, because a half is not a value', () => {
+  // The outlier finding is built this way: one half names what the selected
+  // method measured. Built as a plain template string and interpolated, that
+  // half would be prose the claim check never sees.
+  const half = msg`with ${'a value'} in it`
+  const whole = msg`A sentence ${half}.`
+  assert.equal(whole.text, 'A sentence with a value in it.')
+  assert.throws(() => msg`A sentence ${msg`that is statistically significant`}.`, /may not claim more/u)
+
+  // And an untrusted value carrying the same word is still only sanitised.
+  assert.equal(msg`Column ${'root_cause_id'} seen.`.text, 'Column root_cause_id seen.')
+})
+
 test('a column literally named for a forbidden phrase is profiled, not refused', async () => {
   const { result, report } = await runOn(csvText(['root cause', 'p-value'], [['a', 'b'], ['c', 'd']]))
   assert.deepEqual(report.columns.map((column) => column.name), ['p-value', 'root cause'])
