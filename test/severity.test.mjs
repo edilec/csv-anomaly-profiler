@@ -143,6 +143,14 @@ test('prose composed in two halves is checked in both, because a half is not a v
   const half = msg`with ${'a value'} in it`
   const whole = msg`A sentence ${half}.`
   assert.equal(whole.text, 'A sentence with a value in it.')
+
+  // Inserted VERBATIM, not sanitised. The distinction is observable because
+  // sanitising trims, and a composed half that opens with a space would lose it
+  // and run into the word before: `...).Masked example:` rather than
+  // `...). Masked example:`. This assertion is what fails if the verbatim
+  // branch is removed -- the throwing test above would not, because the inner
+  // message throws while it is being built.
+  assert.equal(msg`A${msg` B`}`.text, 'A B')
   assert.throws(() => msg`A sentence ${msg`that is statistically significant`}.`, /may not claim more/u)
 
   // And an untrusted value carrying the same word is still only sanitised.
