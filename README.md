@@ -268,10 +268,12 @@ Exit 2 has two shapes, and the difference matters to anything that pipes stdout:
 ## Limits
 
 Each limit is enforced **before** the work it bounds. The file size is taken from
-the file system before anything is opened and counted again as the bytes arrive;
-the row, column and field bounds stop the reader rather than trimming its result;
-and two products are checked while the configuration is validated, before a file
-is opened, so that a file this tool calls legal cannot exhaust memory:
+the file system before anything is opened and counted again as the bytes arrive.
+The row bound stops the reader; the column bound stops the run; and a field past
+the field bound stops being accumulated and is marked, so a value that was cut
+short is never examined as though it were whole. Two products are checked while
+the configuration is validated, before a file is opened, so that a file this tool
+calls legal cannot exhaust memory:
 
 - `maxRows` multiplied by `maxColumns` may not exceed 2000000 retained values
 - `maxColumns` multiplied by `maxDistinctCategories` and `maxCategoryLength` may
