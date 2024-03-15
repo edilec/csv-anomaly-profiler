@@ -104,10 +104,21 @@ export function isUsableName(value, limit = MAX_NAME_LENGTH) {
   )
 }
 
-/** A number as a report prints it: at most six decimals, never negative zero. */
+/**
+ * A number as a report prints it: at most six decimals, never negative zero.
+ *
+ * Rounding must never turn a value that is not zero INTO zero. A dispersion of
+ * 0.0000003 printed as `0` sits beside a verdict computed from a dispersion
+ * that is not zero, and a distance of 0.0000004 printed as `0` says two
+ * distributions are identical when they are not -- two numbers disagreeing
+ * about the same thing, which is the same defect as a check that asks about the
+ * raw value while the renderer shows something else. A value too small to
+ * survive the rounding is printed as it is.
+ */
 export function num(value) {
   if (!Number.isFinite(value)) return null
   const rounded = Math.round(value * 1000000) / 1000000
+  if (rounded === 0 && value !== 0) return value
   return Object.is(rounded, -0) ? 0 : rounded
 }
 

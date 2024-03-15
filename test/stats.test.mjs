@@ -12,6 +12,7 @@ import test from 'node:test'
 
 import {
   MAD_CONSTANT,
+  num,
   asNumber,
   median,
   medianAbsoluteDeviation,
@@ -19,6 +20,7 @@ import {
   quantile,
   sortedCopy,
 } from '../src/index.mjs'
+import { columnNamed, csvText, profileText } from './helpers.mjs'
 
 test('the median of an odd and an even count', () => {
   assert.equal(median([1, 2, 3]), 2)
@@ -72,4 +74,29 @@ test('a zero deviation is reported as zero rather than turned into a score', () 
   assert.equal(quantile(flat, 0.75) - quantile(flat, 0.25), 0)
   // The caller must check first: this is what the check exists to avoid.
   assert.equal(modifiedZScore(9, 5, 0), Infinity)
+})
+
+test('rounding a report number never turns something into nothing', async () => {
+  // A dispersion of 0.0000003 printed as 0 would sit beside a verdict computed
+  // from a dispersion that is NOT zero, and the two would disagree about the
+  // same thing. A value too small to survive the rounding is printed as it is.
+  assert.equal(num(0.0000003), 0.0000003)
+  assert.equal(num(-0.0000003), -0.0000003)
+  assert.equal(num(0), 0)
+  assert.equal(num(-0), 0)
+  assert.equal(num(1.23456789), 1.234568)
+  assert.equal(num(Infinity), null)
+
+  // And end to end: thirteen values spaced a ten-millionth apart have a real,
+  // tiny dispersion, so the column gets a real verdict and a dispersion the
+  // report does not flatten to zero.
+  const values = Array.from({ length: 13 }, (_, index) => 1 + (index + 1) / 10000000)
+  const report = await profileText(
+    csvText(['id', 'reading'], values.map((value, index) => [`S-${index}`, value])),
+  )
+  const reading = columnNamed(report, 'reading')
+  assert.equal(reading.numeric.verdict, 'evaluated')
+  assert.ok(reading.numeric.dispersion > 0)
+  assert.equal(reading.numeric.outlierCount, 0)
+  assert.equal(report.status, 'pass')
 })
