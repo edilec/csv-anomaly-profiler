@@ -44,11 +44,12 @@ test('a known outlier is detected under the mad method, with the row and the val
   assert.equal(reading.numeric.outlierCount, 1)
   // Row 15 of the file: the header is line 1, so the fourteenth data row is
   // line 15, which is what a person opening the file would count to.
-  assert.deepEqual(reading.numeric.examples, [
-    { row: 15, value: 500, score: reading.numeric.examples[0].score },
-  ])
-  assert.ok(reading.numeric.examples[0].score > 3.5)
+  // The median is 50 and the median absolute deviation is 1, so the modified
+  // z-score of 500 is 0.6745 * 450. An assertion that compared the score with
+  // itself would pass whatever the arithmetic did.
+  assert.deepEqual(reading.numeric.examples, [{ row: 15, value: 500, score: 303.525 }])
   assert.equal(reading.numeric.median, 50)
+  assert.equal(reading.numeric.dispersion, 1)
 
   const found = findingsFor(report, 'numeric-outlier')
   assert.equal(found.length, 1)
