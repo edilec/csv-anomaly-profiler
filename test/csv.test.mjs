@@ -169,7 +169,9 @@ test('a padded header is accepted and two headers that differ only by padding co
   // with. The padding is dropped from the identity and from nothing else.
   const padded = await profileText('id, region\nR-1, north\n')
   assert.deepEqual(padded.columns.map((column) => column.name), ['id', 'region'])
-  // The VALUE keeps its space: only the header identity is trimmed.
+  // The value is examined, and it is compared and printed with its whitespace
+  // collapsed -- which is what keeps the same padded export from failing its own
+  // baseline one level down. test/false-positives.test.mjs drives that case.
   assert.equal(columnNamed(padded, 'region').values.examined, 1)
   assert.equal(columnNamed(padded, 'region').type, 'categorical')
 

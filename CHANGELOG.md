@@ -3,6 +3,27 @@
 All notable changes to this tool are recorded here. Rule ids are part of the
 public surface: renaming one is a breaking change and is recorded as such.
 
+## Unreleased
+
+### Fixed
+
+- A padded export -- `id, region` with `R-1, north` -- raised `category-drift`
+  and one `unexpected-category` per value at error severity against a baseline
+  the data matched exactly, and the finding printed the value with its padding
+  collapsed: *"region holds the value north ... and the baseline does not list
+  it"*, beside a baseline listing `north`. The comparison used the raw text and
+  the message used the rendered text. A category is now indexed and compared by
+  the form the report prints, a baseline value that does not print as it is
+  written is refused when the document is read, and the whitespace difference is
+  reported as what it is by the new `category-whitespace-collapsed` rule (info).
+- A value that prints as nothing at all -- one that is only spaces -- was
+  examined and indexed under a name no report can print. It is now counted
+  `value-unprintable` alongside the values carrying control characters.
+
+### Added
+
+- `category-whitespace-collapsed` (info) and `categories.reshaped`.
+
 ## 0.1.0
 
 First working version.

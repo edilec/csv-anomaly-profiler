@@ -81,9 +81,31 @@ the first would silently merge them; instead the run stops.
 
 Padding around a header is the one exception, because `id, region` is an ordinary
 export and RFC 4180 keeps the space in the value. Leading and trailing spaces and
-tabs are dropped from the column's **identity** and from nothing else -- values
-keep theirs. Two headers that differ only by padding then collapse onto one name
-and are caught as a `duplicate-column`, which is what makes dropping it safe.
+tabs are dropped from the column's **identity**. Two headers that differ only by
+padding then collapse onto one name and are caught as a `duplicate-column`, which
+is what makes dropping it safe.
+
+## A value is compared as it prints
+
+The same export pads its values, and the report prints a value with its
+whitespace collapsed. So the whitespace-collapsed form is what a category is
+indexed and compared by, on both sides of the comparison:
+
+- an observed value is indexed by the form the report prints, so ` north` and
+  `north` are one value and the padded export raises nothing about its data;
+- a baseline that declares ` north` is **refused** when the document is read,
+  because a declared value that prints differently from the way it is written
+  could never match an observed one;
+- a value that prints as nothing at all -- one that is only spaces -- is counted
+  `value-unprintable` and is not examined, exactly as a value carrying a control
+  character is. It cannot be named in a report, so no claim is made about it.
+
+Asking one question about the raw text and printing the answer about the
+rendered text is how a checker comes to say *"region holds the value north ...
+and the baseline does not list it"* beside a baseline that lists `north`. A
+whitespace difference is still a difference, so it is reported -- as
+`category-whitespace-collapsed`, at `info`, which says which difference it is
+and leaves the exit code alone.
 
 ## Input: the baseline
 
@@ -207,6 +229,9 @@ deviation puts it at a modified z-score of 3.12, inside the default threshold.
   round. Each method reports what it actually used.
 - `categories.tracked` is `false` unless the baseline declares `allowed` or
   `categories` for the column, and `reason` says which of the two reasons applies.
+- `categories.reshaped` counts the values whose stored text differs from the text
+  the report prints -- a whitespace difference and nothing else, since anything
+  else is `value-unprintable` and never reaches the index.
 - `drift.compared` says whether a comparison was made, not whether an entry
   existed to make one from.
 
@@ -219,6 +244,7 @@ deviation puts it at a modified z-score of 3.12, inside the default threshold.
 | `categories-truncated` | warning | a column holds more distinct values than `maxDistinctCategories` |
 | `category-comparison-incomplete` | warning | a value could not be added to the index the comparison uses |
 | `category-drift` | error | the distribution is further from the baseline than `maxCategoryDrift` |
+| `category-whitespace-collapsed` | info | a tracked value carries whitespace this report collapses, so it was compared as it prints |
 | `column-limit-exceeded` | error | the header declares more columns than `maxColumns` |
 | `column-mixed-types` | warning | a column is part numbers and part text |
 | `column-not-evaluable` | warning | a column had rows and no value was examined |
@@ -242,7 +268,7 @@ deviation puts it at a modified z-score of 3.12, inside the default threshold.
 | `row-malformed` | error | a row could not be read as delimited text |
 | `sample-too-small` | warning | fewer values than `minSample` were examined |
 | `unexpected-category` | error | a value was seen that the baseline does not list |
-| `value-unprintable` | warning | a value carries a control or formatting character |
+| `value-unprintable` | warning | a value carries a control or formatting character, or prints as nothing at all |
 
 Every warning above is in the unsettled set, so it produces `incomplete` and exit
 2 rather than a green run. The five positive findings -- `numeric-outlier`,

@@ -341,10 +341,14 @@ function columnReport(column, config, baseline, file) {
   if (column.unprintable > 0) {
     findings.push(makeFinding(
       'value-unprintable',
-      msg`${String(column.unprintable)} value or values in ${column.name} carry a control or formatting
-          character, so they do not print as they are stored and were not examined.`,
+      msg`${String(column.unprintable)} value or values in ${column.name} do not print as they are
+          stored: they carry a control or formatting character, or they print as nothing at all. They
+          were not examined.`,
       at(file, pointer),
-      { suggestion: 'Export the column without control or formatting characters.' },
+      {
+        suggestion: 'Export the column without control or formatting characters, and name a blank '
+          + 'placeholder in missingTokens if it stands for a value that is missing.',
+      },
     ))
   }
   // Only when the column HAD rows. With no data row at all the file-level
@@ -478,9 +482,25 @@ function columnReport(column, config, baseline, file) {
         distinct: column.categories.size,
         truncated: column.categoriesTruncated,
         notIndexed: column.categoryOversized + column.oversized + column.unprintable,
+        reshaped: column.categoryReshaped,
         top: topCategories(column, MAX_TOP_CATEGORIES),
         unexpected: unexpected.slice(0, config.maxExamples),
         unexpectedCount: unexpected.length,
+      }
+      if (column.categoryReshaped > 0) {
+        // A whitespace difference IS a difference and is reported -- but it is
+        // reported as the difference it is. Indexing these values by their raw
+        // text instead would compare one string and print another, and the
+        // report would say a value is absent from a baseline that lists exactly
+        // the text the finding prints.
+        findings.push(makeFinding(
+          'category-whitespace-collapsed',
+          msg`${String(column.categoryReshaped)} value or values in ${column.name} carry leading,
+              trailing or repeated whitespace that this report collapses when it prints them, and they
+              were compared as they print. That is a whitespace difference, not a different value.`,
+          at(file, pointer),
+          { suggestion: 'Trim the column in the export if the padding was not intended.' },
+        ))
       }
       for (const entry of categories.unexpected) {
         findings.push(makeFinding(

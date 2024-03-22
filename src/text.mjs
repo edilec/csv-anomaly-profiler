@@ -73,12 +73,28 @@ export function describeValue(value) {
   }
 }
 
-/** A bounded, control-character-free rendering of an untrusted string. */
-export function sanitize(value, limit = EVIDENCE_LIMIT) {
-  const flat = describeValue(value)
+/**
+ * The form an untrusted string takes when this report prints it, with no length
+ * bound applied yet.
+ *
+ * Whatever decides "are these two values the same" must be asked about THIS
+ * form, never about the raw one. A comparison made on raw text while the
+ * message prints the rendered text is the report that contradicts itself: a
+ * finding stating that a value is not in the baseline, beside a baseline that
+ * lists exactly the value the finding prints. Two strings that differ only in
+ * characters this function removes are one value to every reader of the report,
+ * and a run that calls them different has reported a defect on correct data.
+ */
+export function renderedForm(value) {
+  return describeValue(value)
     .replace(UNSAFE_CHARACTERS, ' ')
     .replace(/\s+/gu, ' ')
     .trim()
+}
+
+/** A bounded, control-character-free rendering of an untrusted string. */
+export function sanitize(value, limit = EVIDENCE_LIMIT) {
+  const flat = renderedForm(value)
   return flat.length > limit ? `${flat.slice(0, limit - 3)}...` : flat
 }
 

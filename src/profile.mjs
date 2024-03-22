@@ -26,7 +26,7 @@ import {
   quantile,
   sortedCopy,
 } from './stats.mjs'
-import { byCodeUnit, hasUnsafeCharacter, num } from './text.mjs'
+import { byCodeUnit, hasUnsafeCharacter, num, renderedForm } from './text.mjs'
 
 export const COLUMN_TYPES = Object.freeze(['numeric', 'categorical', 'mixed', 'undetermined'])
 export const VERDICTS = Object.freeze(['evaluated', 'undetermined'])
@@ -60,6 +60,7 @@ export function newColumn(name, index, tracksCategories) {
     oversized: 0,
     unprintable: 0,
     categoryOversized: 0,
+    categoryReshaped: 0,
     categoriesTruncated: false,
     values: [],
     rows: [],
@@ -85,10 +86,14 @@ export function observeField(column, field, row, config) {
     column.missing += 1
     return
   }
-  if (hasUnsafeCharacter(text)) {
-    // A value carrying a control or formatting character does not print as it
-    // is stored. It is a value, so it is not missing; it cannot be shown or
-    // indexed, so it is not examined either.
+  // What a reader will see. Everything below asks about this form, because a
+  // question answered about the raw text and reported about the rendered one is
+  // two functions disagreeing about one value.
+  const rendered = renderedForm(text)
+  if (hasUnsafeCharacter(text) || rendered === '') {
+    // A value carrying a control or formatting character, or one that prints as
+    // nothing at all, does not print as it is stored. It is a value, so it is
+    // not missing; it cannot be shown or indexed, so it is not examined either.
     column.unprintable += 1
     return
   }
@@ -100,16 +105,20 @@ export function observeField(column, field, row, config) {
     column.rows.push(row)
   }
   if (!column.tracksCategories) return
-  if (text.length > limits.maxCategoryLength) {
+  // The rendered form is what the index retains, so it is what the length bound
+  // measures: a padded value inside the bound once printed is not an oversized
+  // one.
+  if (rendered.length > limits.maxCategoryLength) {
     column.categoryOversized += 1
     return
   }
-  const seen = column.categories.get(text)
+  if (rendered !== text) column.categoryReshaped += 1
+  const seen = column.categories.get(rendered)
   if (seen === undefined && column.categories.size >= limits.maxDistinctCategories) {
     column.categoriesTruncated = true
     return
   }
-  column.categories.set(text, (seen ?? 0) + 1)
+  column.categories.set(rendered, (seen ?? 0) + 1)
 }
 
 export function examinedCount(column) {

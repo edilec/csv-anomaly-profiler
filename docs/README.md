@@ -37,6 +37,34 @@ difference is the whole point:
 - A distance computed against a partial index is a number with no meaning, so
   `drift-undetermined` is raised and no distance is printed at all.
 
+## A value is compared as it prints
+
+The report prints a value with its whitespace collapsed, so that is the form a
+category is indexed and compared by -- on both sides. The alternative was
+measured rather than imagined: indexing the raw text and printing the rendered
+text made a padded export (`id, region` with `R-1, north`) raise
+`category-drift` and one `unexpected-category` per value, at error severity, on
+data that matched its baseline exactly, and print *"region holds the value north
+... and the baseline does not list it"* beside a baseline listing `north`. A
+reader is told a value is absent from a list that contains the text they are
+reading.
+
+Two consequences, both deliberate:
+
+- A baseline value that does not print as it is written is refused when the
+  document is read. It could never match an observed value, and the finding
+  about it would print the two as the same text while calling them different.
+  The ambiguity is refused where it can be corrected.
+- A whitespace difference is still a difference, so it is reported --
+  `category-whitespace-collapsed`, at `info`, which says which difference it is
+  and leaves the exit code alone. Silently normalising and saying nothing would
+  be the other half of the same dishonesty.
+
+The same rule decides what happens to a value that prints as nothing at all. It
+cannot be named in a report, so nothing is claimed about it: it is counted
+`value-unprintable`, it is not examined, and the index that dropped it is not
+called complete.
+
 ## Why the category index is conditional
 
 Only a column the baseline declares `allowed` or `categories` for is indexed. A

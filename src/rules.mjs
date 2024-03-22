@@ -26,6 +26,7 @@ export const RULE_SEVERITY = Object.freeze({
   'categories-truncated': 'warning',
   'category-comparison-incomplete': 'warning',
   'category-drift': 'error',
+  'category-whitespace-collapsed': 'info',
   'column-limit-exceeded': 'error',
   'column-mixed-types': 'warning',
   'column-not-evaluable': 'warning',

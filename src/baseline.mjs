@@ -20,7 +20,7 @@
  * for.
  */
 
-import { hasUnsafeCharacter, isUsableName, sanitize } from './text.mjs'
+import { hasUnsafeCharacter, isUsableName, renderedForm, sanitize } from './text.mjs'
 import { ConfigError } from './config.mjs'
 
 export const BASELINE_SCHEMA_VERSION = '1'
@@ -44,6 +44,18 @@ function validateCategoryValue(value, where, limits) {
     refuse(
       `Every category in ${where} must be a string of at most ${limits.maxCategoryLength} characters with `
       + `no control or formatting character, and "${sanitize(value, 64)}" is not.`,
+    )
+  }
+  // An observed value is indexed by the form the report prints, so a declared
+  // value that prints differently from the way it is written could never match
+  // one -- and the finding would print the two as the same text while calling
+  // them different. The ambiguity is refused in the policy document, where it
+  // can be corrected, rather than carried into a comparison.
+  if (value.length === 0 || renderedForm(value) !== value) {
+    refuse(
+      `Every category in ${where} must print exactly as it is written, and "${sanitize(value, 64)}" does `
+      + `not: it is empty, or it carries leading, trailing or repeated whitespace. Observed values are `
+      + `compared as they print.`,
     )
   }
 }
