@@ -75,23 +75,25 @@ test('a quote left open at the end of the file is reported, not silently closed'
   assert.equal(parsed.rows[1].malformed, true)
 })
 
-test('a lone carriage return is kept as data, and the value is then reported as unprintable', async () => {
+test('a lone carriage return is kept as data, and the value is then printed with it collapsed', async () => {
   // The second deviation from RFC 4180, which excludes CR from `non-escaped`
-  // as well. Keeping it costs nothing because the profiler refuses to examine
-  // a value that does not print as it is stored, so it can never be counted as
-  // an ordinary category.
+  // as well. Keeping it costs nothing because a carriage return is layout: the
+  // value is examined and printed with its whitespace collapsed, and the
+  // difference is counted rather than hidden.
   const parsed = parse('a\nx\ry\n')
   assert.equal(parsed.rows.length, 2)
   assert.deepEqual(parsed.rows[1].fields, ['x\ry'])
   assert.equal(parsed.rows[1].malformed, false)
 
-  // The second half of the sentence, which the reader alone does not show: the
-  // profiler counts that value out of the examination and says so.
+  // The second half of the sentence, which the reader alone does not show.
   const report = await profileText('id,note\nR-1,x\ry\nR-2,plain\n')
-  assert.equal(columnNamed(report, 'note').values.unprintable, 1)
-  assert.equal(columnNamed(report, 'note').values.examined, 1)
-  assert.ok(report.findings.some((finding) => finding.ruleId === 'value-unprintable'))
-  assert.equal(report.status, 'incomplete')
+  assert.equal(columnNamed(report, 'note').values.unprintable, 0)
+  assert.equal(columnNamed(report, 'note').values.examined, 2)
+  assert.equal(columnNamed(report, 'note').values.reshaped, 1)
+  assert.equal(report.findings.some((finding) => finding.ruleId === 'value-unprintable'), false)
+  // The character itself never reaches the output.
+  assert.equal(JSON.stringify(report).includes('\\r'), false)
+  assert.equal(report.status, 'pass')
 })
 
 test('a field longer than the bound stops being accumulated and is marked, not kept', () => {

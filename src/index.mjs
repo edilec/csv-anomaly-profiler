@@ -482,12 +482,11 @@ function columnReport(column, config, baseline, file) {
         distinct: column.categories.size,
         truncated: column.categoriesTruncated,
         notIndexed: column.categoryOversized + column.oversized + column.unprintable,
-        reshaped: column.categoryReshaped,
         top: topCategories(column, MAX_TOP_CATEGORIES),
         unexpected: unexpected.slice(0, config.maxExamples),
         unexpectedCount: unexpected.length,
       }
-      if (column.categoryReshaped > 0) {
+      if (column.reshaped > 0) {
         // A whitespace difference IS a difference and is reported -- but it is
         // reported as the difference it is. Indexing these values by their raw
         // text instead would compare one string and print another, and the
@@ -495,9 +494,9 @@ function columnReport(column, config, baseline, file) {
         // the text the finding prints.
         findings.push(makeFinding(
           'category-whitespace-collapsed',
-          msg`${String(column.categoryReshaped)} value or values in ${column.name} carry leading,
-              trailing or repeated whitespace that this report collapses when it prints them, and they
-              were compared as they print. That is a whitespace difference, not a different value.`,
+          msg`${String(column.reshaped)} value or values in ${column.name} do not print as they are
+              stored: the whitespace in them is collapsed, and they were compared as they print. That is
+              a whitespace difference, not a different value.`,
           at(file, pointer),
           { suggestion: 'Trim the column in the export if the padding was not intended.' },
         ))
@@ -587,6 +586,7 @@ function columnReport(column, config, baseline, file) {
       oversized: column.oversized,
       unprintable: column.unprintable,
       categoryOversized: column.categoryOversized,
+      reshaped: column.reshaped,
     },
     missingRate,
     numeric,

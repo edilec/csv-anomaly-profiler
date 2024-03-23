@@ -65,7 +65,7 @@ test('a padded export against a matching baseline reports nothing about its data
   // is, at info, which leaves the status to the other findings.
   assert.deepEqual(ruleIds(report), ['category-whitespace-collapsed'])
   assert.equal(report.findings[0].severity, 'info')
-  assert.equal(region.categories.reshaped, 4)
+  assert.equal(region.values.reshaped, 4)
   assert.ok(report.findings[0].message.includes('not a different value'))
   assert.equal(report.status, 'pass')
 })
@@ -104,7 +104,54 @@ test('an internal run of whitespace is a whitespace difference, not a different 
   const region = columnNamed(report, 'region')
   assert.deepEqual(region.categories.top, [{ value: 'north west', count: 2 }])
   assert.deepEqual(findingsFor(report, 'unexpected-category'), [])
-  assert.equal(region.categories.reshaped, 1)
+  assert.equal(region.values.reshaped, 1)
+  assert.equal(report.status, 'pass')
+})
+
+test('a quoted field carrying a line break is examined, because that is what quoting is for', async () => {
+  // RFC 4180 section 2.6: a field containing a line break is enclosed in double
+  // quotes. It is the one thing quoting exists for, so an export with
+  // multi-line notes must not be permanently incomplete.
+  const report = await profileText('id,note\nR-1,"line1\nline2"\nR-2,plain\n')
+  const note = columnNamed(report, 'note')
+  assert.equal(note.values.unprintable, 0)
+  assert.equal(note.values.examined, 2)
+  assert.equal(note.values.reshaped, 1)
+  assert.deepEqual(report.findings, [])
+  assert.equal(report.status, 'pass')
+  // The line break itself never reaches the output: it is printed collapsed.
+  assert.equal(JSON.stringify(report).includes('line1\\nline2'), false)
+})
+
+test('the multi-line export exits 0 at the command line, and a hidden character still does not', async () => {
+  await withTempDir(async (directory) => {
+    const good = await writeText(directory, 'notes.csv', 'id,note\nR-1,"line1\nline2"\nR-2,plain\n')
+    const goodRun = await runCli(['--csv', good, '--json'])
+    assert.equal(goodRun.code, 0)
+    assert.equal(JSON.parse(goodRun.stdout).status, 'pass')
+
+    // The negative twin: a bidi override is not layout. It reverses displayed
+    // text, so the value still does not print as it is stored.
+    const hidden = await writeText(
+      directory,
+      'hidden.csv',
+      `id,note\nR-1,line1${String.fromCharCode(0x202e)}line2\nR-2,plain\n`,
+    )
+    const hiddenRun = await runCli(['--csv', hidden, '--json'])
+    assert.equal(hiddenRun.code, 2)
+    const report = JSON.parse(hiddenRun.stdout)
+    assert.equal(report.status, 'incomplete')
+    assert.ok(report.findings.some((finding) => finding.ruleId === 'value-unprintable'))
+  })
+})
+
+test('a tab inside a field is layout, and a tabbed value matches its baseline entry', async () => {
+  const report = await profileText(regions(['north\twest', 'north west']), {
+    baseline: { columns: { id: {}, region: { allowed: ['north west'] } } },
+  })
+  const region = columnNamed(report, 'region')
+  assert.deepEqual(region.categories.top, [{ value: 'north west', count: 2 }])
+  assert.equal(region.values.unprintable, 0)
   assert.equal(report.status, 'pass')
 })
 

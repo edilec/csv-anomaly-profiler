@@ -70,7 +70,7 @@ dressed up as what the grammar meant:
 | --- | --- | --- |
 | `ab"cd` | Kept as a literal quote character | A deviation. RFC 4180's `non-escaped` production excludes `"`, so a strict reader refuses the row. This one accepts it, because the field did not open with a quote and so no quote inside it can be closing one: only one reading of the data is available |
 | `"ab"c` | The row is reported as malformed and is **not profiled** | The grammar really does run out here -- after a closing quote only a comma or a line ending may follow -- and the two readings of `c` differ in what the data IS |
-| A lone `CR` | Kept as data, not a record separator | A deviation, for the same reason: `non-escaped` excludes `CR`. Keeping it costs nothing, because a value that does not print as it is stored is reported as `value-unprintable` and is never examined |
+| A lone `CR` | Kept as data, not a record separator | A deviation, for the same reason: `non-escaped` excludes `CR`. Keeping it costs nothing, because a carriage return is layout: the value is examined and printed with its whitespace collapsed, and the difference is counted in `values.reshaped` |
 
 A row whose field count does not match the header is **not** spread across the
 columns on a guess about which field is missing: it is reported and skipped.
@@ -97,8 +97,22 @@ indexed and compared by, on both sides of the comparison:
   because a declared value that prints differently from the way it is written
   could never match an observed one;
 - a value that prints as nothing at all -- one that is only spaces -- is counted
-  `value-unprintable` and is not examined, exactly as a value carrying a control
+  `value-unprintable` and is not examined, exactly as a value carrying a hidden
   character is. It cannot be named in a report, so no claim is made about it.
+
+Tab, line feed and carriage return are **layout**, and a value carrying one is
+examined. RFC 4180 section 2.6 encloses a field containing a line break in
+double quotes -- it is the one thing quoting exists for -- so an export with
+multi-line notes must not be permanently `incomplete`. Collapsing the break to a
+space prints the value faithfully, and `values.reshaped` counts the values whose
+stored text differs from the text the report prints.
+
+Nothing else in the unsafe set is layout, and none of it is examined: U+0085 and
+U+009B forge lines in a report, U+202E reverses displayed text, U+FEFF and the
+other format characters hide it, and U+2028/U+2029 terminate a line inside a
+JavaScript string. A value carrying any of them is `value-unprintable`. A column
+**name** forgives none of them, layout included: two names printing the same text
+would silently become one column.
 
 Asking one question about the raw text and printing the answer about the
 rendered text is how a checker comes to say *"region holds the value north ...
@@ -208,7 +222,7 @@ deviation puts it at a modified z-score of 3.12, inside the default threshold.
   "pointer": "/columns/units",
   "type": "numeric",
   "values": { "total": 24, "missing": 0, "examined": 24, "numeric": 24, "other": 0,
-              "oversized": 0, "unprintable": 0, "categoryOversized": 0 },
+              "oversized": 0, "unprintable": 0, "categoryOversized": 0, "reshaped": 0 },
   "missingRate": 0,
   "numeric": { "verdict": "evaluated", "reason": null, "method": "mad", "examined": 24,
                "median": 42, "dispersion": 2, "threshold": 3.5, "constant": 0.6745,
@@ -229,9 +243,9 @@ deviation puts it at a modified z-score of 3.12, inside the default threshold.
   round. Each method reports what it actually used.
 - `categories.tracked` is `false` unless the baseline declares `allowed` or
   `categories` for the column, and `reason` says which of the two reasons applies.
-- `categories.reshaped` counts the values whose stored text differs from the text
-  the report prints -- a whitespace difference and nothing else, since anything
-  else is `value-unprintable` and never reaches the index.
+- `values.reshaped` counts the values whose stored text differs from the text the
+  report prints -- a whitespace difference and nothing else, since anything else
+  is `value-unprintable` and is never examined.
 - `drift.compared` says whether a comparison was made, not whether an entry
   existed to make one from.
 
@@ -244,7 +258,7 @@ deviation puts it at a modified z-score of 3.12, inside the default threshold.
 | `categories-truncated` | warning | a column holds more distinct values than `maxDistinctCategories` |
 | `category-comparison-incomplete` | warning | a value could not be added to the index the comparison uses |
 | `category-drift` | error | the distribution is further from the baseline than `maxCategoryDrift` |
-| `category-whitespace-collapsed` | info | a tracked value carries whitespace this report collapses, so it was compared as it prints |
+| `category-whitespace-collapsed` | info | a compared value carries whitespace this report collapses, so it was compared as it prints |
 | `column-limit-exceeded` | error | the header declares more columns than `maxColumns` |
 | `column-mixed-types` | warning | a column is part numbers and part text |
 | `column-not-evaluable` | warning | a column had rows and no value was examined |
@@ -268,7 +282,7 @@ deviation puts it at a modified z-score of 3.12, inside the default threshold.
 | `row-malformed` | error | a row could not be read as delimited text |
 | `sample-too-small` | warning | fewer values than `minSample` were examined |
 | `unexpected-category` | error | a value was seen that the baseline does not list |
-| `value-unprintable` | warning | a value carries a control or formatting character, or prints as nothing at all |
+| `value-unprintable` | warning | a value carries a control or formatting character that is not layout, or prints as nothing at all |
 
 Every warning above is in the unsettled set, so it produces `incomplete` and exit
 2 rather than a green run. The five positive findings -- `numeric-outlier`,

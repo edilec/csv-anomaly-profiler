@@ -65,6 +65,25 @@ cannot be named in a report, so nothing is claimed about it: it is counted
 `value-unprintable`, it is not examined, and the index that dropped it is not
 called complete.
 
+### Layout is not a hidden character
+
+Tab, line feed and carriage return are the exception, and the reason is RFC 4180
+section 2.6: a field containing a line break is enclosed in double quotes. That
+is what quoting is FOR. Counting such a value `value-unprintable` made every
+export carrying a multi-line note permanently `incomplete` at exit 2 -- a
+refusal aimed at hidden characters, landing on the most ordinary use of the
+format the tool claims to read.
+
+The line between the two is what an exporter emits to lay a value out. A tab and
+a line break are layout, they collapse to a space, and the value prints
+faithfully. U+0085, U+009B, U+202E, U+FEFF and the rest are not layout: they
+forge lines, reverse text or hide it. Those still make a value unprintable, and
+`values.reshaped` keeps the collapse visible in every column rather than letting
+it pass in silence.
+
+A column NAME forgives none of them, layout included. A name is an identity, and
+`a<TAB>b` and `a b` printing the same text would silently become one column.
+
 ## Why the category index is conditional
 
 Only a column the baseline declares `allowed` or `categories` for is indexed. A

@@ -19,10 +19,17 @@ public surface: renaming one is a breaking change and is recorded as such.
 - A value that prints as nothing at all -- one that is only spaces -- was
   examined and indexed under a name no report can print. It is now counted
   `value-unprintable` alongside the values carrying control characters.
+- A quoted field carrying a line break -- the one shape RFC 4180 quoting exists
+  for -- was counted `value-unprintable`, never examined, and made the run
+  `incomplete` at exit 2, so any export with multi-line notes could never pass.
+  Tab, line feed and carriage return are now treated as the layout they are:
+  the value is examined and printed with its whitespace collapsed. Every other
+  member of the unsafe set still makes a value unprintable, and a column name
+  still forgives none of them.
 
 ### Added
 
-- `category-whitespace-collapsed` (info) and `categories.reshaped`.
+- `category-whitespace-collapsed` (info) and `values.reshaped`.
 
 ## 0.1.0
 

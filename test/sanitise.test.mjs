@@ -26,6 +26,8 @@ import { columnNamed, csvText, profileText, ruleIds } from './helpers.mjs'
 const CLASSES = Object.freeze([
   ['C0', String.fromCharCode(0x01)],
   ['C0 tab', String.fromCharCode(0x09)],
+  ['C0 line feed', String.fromCharCode(0x0a)],
+  ['C0 carriage return', String.fromCharCode(0x0d)],
   ['DEL', String.fromCharCode(0x7f)],
   ['C1 NEL', String.fromCharCode(0x85)],
   ['C1 CSI', String.fromCharCode(0x9b)],
@@ -37,6 +39,17 @@ const CLASSES = Object.freeze([
 ])
 
 const UNSAFE = new RegExp(`[\\p{Cc}\\p{Cf}${LINE_SEPARATORS}]`, 'u')
+
+/**
+ * The three classes a VALUE may legally carry: they are layout, and collapsing
+ * them to a space prints the value faithfully. RFC 4180 section 2.6 permits a
+ * line break inside a quoted field, and a tab is ordinary text. Everything else
+ * in the table hides or reorders text and still makes a value unprintable.
+ *
+ * A header is an identity and forgives none of them: two names printing the same
+ * text would silently become one column.
+ */
+const LAYOUT = new Set(['C0 tab', 'C0 line feed', 'C0 carriage return'])
 
 test('every unsafe class is removed from a sanitised string', () => {
   for (const [name, character] of CLASSES) {
@@ -70,7 +83,10 @@ test('a name that merely survives sanitising is still refused, because it would 
 
 test('an unsafe character arriving through a COLUMN HEADER stops the run rather than printing', async () => {
   for (const [name, character] of CLASSES) {
-    const report = await profileText(`id,a${character}b\n1,2\n`)
+    // A bare line feed would end the header row instead of landing inside a
+    // name, so it arrives the way a file would really carry one: quoted.
+    const header = character === '\n' ? 'id,"a\nb"' : `id,a${character}b`
+    const report = await profileText(`${header}\n1,2\n`)
     assert.deepEqual(ruleIds(report), ['header-column-unusable'], name)
     assert.equal(UNSAFE.test(JSON.stringify(report)), false, name)
     assert.equal(report.status, 'incomplete', name)
@@ -79,10 +95,25 @@ test('an unsafe character arriving through a COLUMN HEADER stops the run rather 
 
 test('an unsafe character arriving through a VALUE is counted, never printed', async () => {
   for (const [name, character] of CLASSES) {
-    const report = await profileText(csvText(['id', 'note'], [['R-1', `x${character}y`]]))
+    const document = character === '\n'
+      ? 'id,note\nR-1,"x\ny"\n'
+      : csvText(['id', 'note'], [['R-1', `x${character}y`]])
+    const report = await profileText(document)
+    // Whatever the class, the character itself never reaches the output.
     assert.equal(UNSAFE.test(JSON.stringify(report)), false, name)
-    assert.equal(columnNamed(report, 'note').values.unprintable, 1, name)
-    assert.ok(ruleIds(report).includes('value-unprintable'), name)
+    const note = columnNamed(report, 'note')
+    if (LAYOUT.has(name)) {
+      // Layout: the value is examined and printed with its whitespace
+      // collapsed, and the difference is counted rather than hidden.
+      assert.equal(note.values.unprintable, 0, name)
+      assert.equal(note.values.examined, 1, name)
+      assert.equal(note.values.reshaped, 1, name)
+      assert.equal(ruleIds(report).includes('value-unprintable'), false, name)
+    } else {
+      assert.equal(note.values.unprintable, 1, name)
+      assert.equal(note.values.reshaped, 0, name)
+      assert.ok(ruleIds(report).includes('value-unprintable'), name)
+    }
   }
 })
 

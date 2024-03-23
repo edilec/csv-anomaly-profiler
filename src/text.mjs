@@ -50,6 +50,33 @@ export function hasUnsafeCharacter(value) {
   return typeof value !== 'string' || new RegExp(UNSAFE_CHARACTERS.source, 'u').test(value)
 }
 
+/**
+ * The whitespace a VALUE may carry although the renderer replaces it.
+ *
+ * RFC 4180 section 2.6 permits a line break inside a quoted field -- it is the
+ * reason quoting exists -- and a tab is ordinary text in an export. Both are
+ * layout: collapsing them to a space prints the value faithfully, and refusing
+ * them would report a defect on any export carrying a multi-line note.
+ *
+ * Nothing else in the unsafe set is layout. U+0085 and U+009B forge lines,
+ * U+202E reverses displayed text, U+FEFF and the other format characters hide
+ * it, and U+2028/U+2029 are line terminators inside a JavaScript string. None of
+ * them is a character an exporter emits to lay a value out, so a value carrying
+ * one still does not print as it is stored.
+ */
+const VALUE_WHITESPACE = /[\t\n\v\f\r]/gu
+
+/**
+ * Whether a string carries something a report cannot print faithfully.
+ *
+ * This is the question to ask about a VALUE. `hasUnsafeCharacter` stays the
+ * question for an identity -- a column name, a baseline key -- where two
+ * different strings printing the same text would silently become one thing.
+ */
+export function hasUnprintableCharacter(value) {
+  return typeof value !== 'string' || hasUnsafeCharacter(value.replace(VALUE_WHITESPACE, ''))
+}
+
 export const EVIDENCE_LIMIT = 200
 export const MAX_NAME_LENGTH = 128
 

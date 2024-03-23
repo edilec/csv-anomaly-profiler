@@ -26,7 +26,7 @@ import {
   quantile,
   sortedCopy,
 } from './stats.mjs'
-import { byCodeUnit, hasUnsafeCharacter, num, renderedForm } from './text.mjs'
+import { byCodeUnit, hasUnprintableCharacter, num, renderedForm } from './text.mjs'
 
 export const COLUMN_TYPES = Object.freeze(['numeric', 'categorical', 'mixed', 'undetermined'])
 export const VERDICTS = Object.freeze(['evaluated', 'undetermined'])
@@ -60,7 +60,7 @@ export function newColumn(name, index, tracksCategories) {
     oversized: 0,
     unprintable: 0,
     categoryOversized: 0,
-    categoryReshaped: 0,
+    reshaped: 0,
     categoriesTruncated: false,
     values: [],
     rows: [],
@@ -90,13 +90,17 @@ export function observeField(column, field, row, config) {
   // question answered about the raw text and reported about the rendered one is
   // two functions disagreeing about one value.
   const rendered = renderedForm(text)
-  if (hasUnsafeCharacter(text) || rendered === '') {
+  if (hasUnprintableCharacter(text) || rendered === '') {
     // A value carrying a control or formatting character, or one that prints as
     // nothing at all, does not print as it is stored. It is a value, so it is
     // not missing; it cannot be shown or indexed, so it is not examined either.
     column.unprintable += 1
     return
   }
+  // A value whose stored text differs from the text this report prints is
+  // counted in every column, tracked or not, so that nothing is profiled whose
+  // rendering silently differs from what is in the file.
+  if (rendered !== text) column.reshaped += 1
   const value = asNumber(text)
   if (value === null) column.other += 1
   else {
@@ -112,7 +116,6 @@ export function observeField(column, field, row, config) {
     column.categoryOversized += 1
     return
   }
-  if (rendered !== text) column.categoryReshaped += 1
   const seen = column.categories.get(rendered)
   if (seen === undefined && column.categories.size >= limits.maxDistinctCategories) {
     column.categoriesTruncated = true
