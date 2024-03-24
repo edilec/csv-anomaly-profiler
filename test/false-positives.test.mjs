@@ -155,6 +155,68 @@ test('a tab inside a field is layout, and a tabbed value matches its baseline en
   assert.equal(report.status, 'pass')
 })
 
+const PAIRS = Array.from({ length: 20 }, (_, index) => [String(index + 1), String((index + 1) * 2)])
+
+function pairs(extra) {
+  return `a,b\n${PAIRS.map((row) => row.join(',')).join('\n')}\n${extra}`
+}
+
+test('a blank line between data rows is not a row that fails to match the header', async () => {
+  // Every reader of this format skips a blank line. Reporting it as a ragged
+  // row at error severity sent somebody to correct a file with nothing wrong
+  // with it -- and a trailing blank line is what a text editor leaves behind.
+  const report = await profileText(pairs('\n3,6\n'))
+  assert.equal(findingsFor(report, 'row-field-count-mismatch').length, 0)
+  assert.deepEqual(ruleIds(report), ['blank-line-skipped'])
+  assert.equal(report.findings[0].severity, 'info')
+  assert.equal(report.summary.rowsBlank, 1)
+  assert.equal(report.summary.rowsSkipped, 0)
+  assert.equal(report.summary.rowsProfiled, 21)
+  assert.equal(report.status, 'pass')
+
+  // Skipped is not the same as passed over in silence: the line is named.
+  assert.ok(report.findings[0].message.includes('first at line 22'))
+})
+
+test('the blank line exits 0 at the command line, and a ragged row still does not', async () => {
+  await withTempDir(async (directory) => {
+    const good = await writeText(directory, 'blank.csv', pairs('\n3,6\n'))
+    const goodRun = await runCli(['--csv', good, '--json'])
+    assert.equal(goodRun.code, 0)
+    assert.equal(JSON.parse(goodRun.stdout).status, 'pass')
+
+    // The negative twin: a row that really does not match the header is not
+    // forgiven, because which value belongs to which column is not established.
+    const ragged = await writeText(directory, 'ragged.csv', pairs('3,6,9\n'))
+    const raggedRun = await runCli(['--csv', ragged, '--json'])
+    assert.equal(raggedRun.code, 2)
+    const report = JSON.parse(raggedRun.stdout)
+    assert.ok(report.findings.some((finding) => finding.ruleId === 'row-field-count-mismatch'))
+    assert.equal(report.status, 'incomplete')
+  })
+})
+
+test('a blank line is a value, not a blank line, when the header declares one column', async () => {
+  // With one column the file cannot mean anything else: the line IS a row whose
+  // single value is empty, and skipping it would drop a row that was there.
+  const report = await profileText('a\n1\n\n3\n')
+  assert.equal(report.summary.rowsBlank, 0)
+  assert.equal(report.summary.rowsProfiled, 3)
+  assert.equal(columnNamed(report, 'a').values.total, 3)
+  assert.equal(columnNamed(report, 'a').values.missing, 1)
+  assert.equal(ruleIds(report).includes('blank-line-skipped'), false)
+})
+
+test('a quoted empty field on its own line is a row with one field, not a blank line', async () => {
+  // `""` is a row whose single value is the empty string. A reader that could
+  // not tell it from a blank line would silently drop it, so the difference is
+  // carried out of the reader rather than guessed at afterwards.
+  const report = await profileText(pairs('""\n'))
+  assert.equal(report.summary.rowsBlank, 0)
+  assert.equal(findingsFor(report, 'row-field-count-mismatch').length, 1)
+  assert.equal(report.status, 'incomplete')
+})
+
 test('a baseline value that does not print as it is written is refused when the document is read', async () => {
   await withTempDir(async (directory) => {
     const csv = await writeText(directory, 'padded.csv', PADDED)

@@ -125,6 +125,7 @@ const EMPTY_SUMMARY = Object.freeze({
   rows: 0,
   rowsProfiled: 0,
   rowsSkipped: 0,
+  rowsBlank: 0,
   columns: 0,
   columnsEvaluated: 0,
   columnsUndetermined: 0,
@@ -617,6 +618,8 @@ export async function profileCsv({ csv, config: configPath = null, baseline: bas
     columns: [],
     dataRows: 0,
     rowsSeen: 0,
+    blankLines: 0,
+    firstBlankLine: null,
     rowsProfiled: 0,
     malformed: 0,
     firstMalformed: null,
@@ -673,6 +676,20 @@ export async function profileCsv({ csv, config: configPath = null, baseline: bas
       return true
     }
 
+    // A line holding no character at all carries no value to attribute, so it
+    // is not a row that does not match the header -- it is not a row. Most
+    // readers of this format skip it, and reporting it as a ragged row sent a
+    // reader to correct a file with nothing wrong with it. It is skipped,
+    // counted, and named in the report, because a line that was passed over in
+    // silence is the other half of the same defect.
+    //
+    // A header of exactly one column is the exception: there an empty line IS a
+    // row whose single value is empty, and the file cannot mean anything else.
+    if (row.blank && state.columns.length !== 1) {
+      state.blankLines += 1
+      if (state.firstBlankLine === null) state.firstBlankLine = line
+      return true
+    }
     state.dataRows += 1
     if (state.dataRows > config.limits.maxRows) {
       state.truncated = true
@@ -745,6 +762,15 @@ export async function profileCsv({ csv, config: configPath = null, baseline: bas
       { suggestion: 'Raise limits.maxRows deliberately, or profile a smaller extract.' },
     ))
   }
+  if (state.blankLines > 0) {
+    findings.push(makeFinding(
+      'blank-line-skipped',
+      msg`${String(state.blankLines)} line or lines hold nothing at all, first at line
+          ${String(state.firstBlankLine)}, and were skipped. A blank line carries no value to attribute
+          to the ${String(state.columns.length)} columns the header declares.`,
+      at(file, '/rows'),
+    ))
+  }
   if (state.malformed > 0) {
     findings.push(makeFinding(
       'row-malformed',
@@ -814,6 +840,7 @@ export async function profileCsv({ csv, config: configPath = null, baseline: bas
       rows: state.rowsSeen,
       rowsProfiled: state.rowsProfiled,
       rowsSkipped: state.rowsSeen - state.rowsProfiled,
+      rowsBlank: state.blankLines,
       columns: entries.length,
       columnsEvaluated: evaluated,
       columnsUndetermined: undetermined,
@@ -864,7 +891,8 @@ export function formatSummary(report) {
   lines.push('')
   lines.push(
     `${report.summary.columns} column(s) over ${report.summary.rowsProfiled} row(s) profiled of `
-    + `${report.summary.rows} read; ${report.summary.rowsSkipped} row(s) skipped.`,
+    + `${report.summary.rows} read; ${report.summary.rowsSkipped} row(s) skipped, `
+    + `${report.summary.rowsBlank} blank line(s).`,
   )
   lines.push(
     `${report.summary.columnsEvaluated} column(s) got a numeric verdict under "${report.configuration.method}", `

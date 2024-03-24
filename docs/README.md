@@ -84,6 +84,29 @@ it pass in silence.
 A column NAME forgives none of them, layout included. A name is an identity, and
 `a<TAB>b` and `a b` printing the same text would silently become one column.
 
+## A blank line is not a ragged row
+
+The reader hands a blank line to the profiler as a row of one empty field,
+because that is what the bytes say. The profiler then could not align it to a
+two-column header and reported `row-field-count-mismatch` at error severity,
+exiting 2 on a file whose only irregularity was the blank line a text editor
+leaves at the end.
+
+The reading it takes now: a line holding no character at all carries no value to
+attribute, so it is skipped. Two things keep that from becoming a silent drop.
+
+- It is counted and named -- `summary.rowsBlank` and `blank-line-skipped` at
+  `info` -- because a line passed over in silence is the other half of the same
+  defect.
+- The reader, not the profiler, decides what is blank. `""` on its own line is a
+  row whose single value is the empty string, and the two are indistinguishable
+  once the fields are parsed, so the reader carries a `blank` flag out with the
+  row. A guess made after the fact would drop a real row.
+
+A header of exactly one column is the exception, and it is not a special case so
+much as the same rule: there an empty line IS a row whose single value is empty,
+and no other reading is available.
+
 ## Why the category index is conditional
 
 Only a column the baseline declares `allowed` or `categories` for is indexed. A

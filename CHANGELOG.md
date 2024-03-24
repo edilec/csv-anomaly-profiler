@@ -27,9 +27,16 @@ public surface: renaming one is a breaking change and is recorded as such.
   member of the unsafe set still makes a value unprintable, and a column name
   still forgives none of them.
 
+- A blank line between data rows was `row-field-count-mismatch` at error
+  severity and exit 2. A line holding nothing at all carries no value to
+  attribute, so it is now skipped, counted in `summary.rowsBlank` and named by
+  `blank-line-skipped` at `info`. A header of exactly one column keeps the old
+  reading, where an empty line is a row whose single value is empty.
+
 ### Added
 
-- `category-whitespace-collapsed` (info) and `values.reshaped`.
+- `category-whitespace-collapsed` (info), `blank-line-skipped` (info),
+  `values.reshaped` and `summary.rowsBlank`.
 
 ## 0.1.0
 

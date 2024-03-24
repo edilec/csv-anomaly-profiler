@@ -23,6 +23,7 @@ export const SEVERITIES = Object.freeze(['error', 'warning', 'info'])
 export const RULE_SEVERITY = Object.freeze({
   'baseline-column-absent': 'error',
   'baseline-entry-missing': 'warning',
+  'blank-line-skipped': 'info',
   'categories-truncated': 'warning',
   'category-comparison-incomplete': 'warning',
   'category-drift': 'error',

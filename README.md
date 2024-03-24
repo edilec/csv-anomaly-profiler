@@ -75,6 +75,15 @@ dressed up as what the grammar meant:
 A row whose field count does not match the header is **not** spread across the
 columns on a guess about which field is missing: it is reported and skipped.
 
+A line holding nothing at all is not such a row -- it is not a row. It carries no
+value to attribute, every reader of this format skips it, and a text editor
+leaves one at the end of a file, so it is skipped, counted in `summary.rowsBlank`
+and named by `blank-line-skipped` at `info`. A header of exactly one column is
+the exception: there an empty line **is** a row whose single value is empty and
+the file cannot mean anything else, so it is profiled as one. `""` alone on a
+line is a row with one empty field in either case, and the reader is what tells
+the two apart.
+
 A header name must print exactly as it is stored and be at most 128 characters.
 `a<U+0001>b` and `a b` print the same and are two different columns, so accepting
 the first would silently merge them; instead the run stops.
@@ -255,6 +264,7 @@ deviation puts it at a modified z-score of 3.12, inside the default threshold.
 | --- | --- | --- |
 | `baseline-column-absent` | error | the baseline describes a column the file does not have |
 | `baseline-entry-missing` | warning | the file has a column the baseline says nothing about |
+| `blank-line-skipped` | info | a line held nothing at all and was skipped, and the header declares more than one column |
 | `categories-truncated` | warning | a column holds more distinct values than `maxDistinctCategories` |
 | `category-comparison-incomplete` | warning | a value could not be added to the index the comparison uses |
 | `category-drift` | error | the distribution is further from the baseline than `maxCategoryDrift` |

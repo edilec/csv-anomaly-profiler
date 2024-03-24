@@ -41,11 +41,17 @@ export const CSV_PROBLEMS = Object.freeze(['text-after-quote', 'unterminated-quo
 /**
  * Create the reader.
  *
- * `onRow` receives `{ index, fields, fieldCount, malformed }` where `fields` is
- * an array of `{ text, truncated }` capped at `maxColumns` entries and
- * `fieldCount` is how many fields the row actually had. Returning `false` from
- * `onRow` stops the reader: the caller owns the row bound, because only the
+ * `onRow` receives `{ index, fields, fieldCount, malformed, blank }` where
+ * `fields` is an array of `{ text, truncated }` capped at `maxColumns` entries
+ * and `fieldCount` is how many fields the row actually had. Returning `false`
+ * from `onRow` stops the reader: the caller owns the row bound, because only the
  * caller knows what it means.
+ *
+ * `blank` marks a line that held no character at all before its ending. It is
+ * not the same as a line holding one empty field: `""` is a row whose single
+ * value is the empty string, and a reader that could not tell the two apart
+ * would silently drop it. Only the reader knows which of the two arrived, so
+ * only the reader can say.
  */
 export function createCsvReader({ maxFieldLength, maxColumns, onRow, onProblem }) {
   let state = 'field-start'
@@ -54,6 +60,7 @@ export function createCsvReader({ maxFieldLength, maxColumns, onRow, onProblem }
   let fields = []
   let fieldCount = 0
   let malformed = false
+  let quoted = false
   let pending = false
   let index = 0
   let stopped = false
@@ -68,11 +75,13 @@ export function createCsvReader({ maxFieldLength, maxColumns, onRow, onProblem }
 
   const finishRow = () => {
     pushField()
-    const row = { index, fields, fieldCount, malformed }
+    const blank = !quoted && !malformed && fieldCount === 1 && fields[0]?.text === ''
+    const row = { index, fields, fieldCount, malformed, blank }
     index += 1
     fields = []
     fieldCount = 0
     malformed = false
+    quoted = false
     pending = false
     state = 'field-start'
     if (onRow(row) === false) stopped = true
@@ -100,6 +109,7 @@ export function createCsvReader({ maxFieldLength, maxColumns, onRow, onProblem }
       if (state === 'field-start') {
         if (character === QUOTE) {
           state = 'in-quoted'
+          quoted = true
         } else if (character === COMMA) {
           pushField()
         } else if (character === LF) {
