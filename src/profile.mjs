@@ -60,6 +60,7 @@ export function newColumn(name, index, tracksCategories) {
     oversized: 0,
     unprintable: 0,
     categoryOversized: 0,
+    categoryDropped: 0,
     reshaped: 0,
     categoriesTruncated: false,
     values: [],
@@ -118,7 +119,12 @@ export function observeField(column, field, row, config) {
   }
   const seen = column.categories.get(rendered)
   if (seen === undefined && column.categories.size >= limits.maxDistinctCategories) {
+    // The value is evidence this comparison did not get, exactly like a value
+    // over the length bound. It is counted HERE, where it is dropped: a count
+    // assembled later from the other counters reported zero beside the
+    // admission that the index had been truncated.
     column.categoriesTruncated = true
+    column.categoryDropped += 1
     return
   }
   column.categories.set(rendered, (seen ?? 0) + 1)

@@ -482,7 +482,8 @@ function columnReport(column, config, baseline, file) {
         indexComplete,
         distinct: column.categories.size,
         truncated: column.categoriesTruncated,
-        notIndexed: column.categoryOversized + column.oversized + column.unprintable,
+        notIndexed:
+          column.categoryOversized + column.categoryDropped + column.oversized + column.unprintable,
         top: topCategories(column, MAX_TOP_CATEGORIES),
         unexpected: unexpected.slice(0, config.maxExamples),
         unexpectedCount: unexpected.length,

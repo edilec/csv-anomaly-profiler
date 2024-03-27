@@ -114,6 +114,42 @@ test('a truncated index keeps its positive findings and loses its negative claim
   assert.ok(withheld[0].message.includes('whether the column holds others'))
   assert.ok(ruleIds(report).includes('categories-truncated'))
   assert.equal(report.status, 'incomplete')
+
+  // And it says HOW MUCH evidence it did not get. `charlie` and `delta` were
+  // dropped by the cap, so a count of zero here would be a sentence
+  // contradicting itself: no value was dropped, and the index is truncated.
+  assert.equal(region.categories.notIndexed, 2)
+  assert.ok(withheld[0].message.startsWith('2 value or values in region were not added'))
+})
+
+test('the count of dropped evidence is the count, not the counters that were convenient', async () => {
+  // 31 distinct values against a cap of 4: 27 values were dropped, and the
+  // count in the message is the one a reader would arrive at by hand.
+  const values = Array.from({ length: 31 }, (_, index) => `v${String(index).padStart(2, '0')}`)
+  const report = await profileText(regions(values), {
+    config: { limits: { maxDistinctCategories: 4 } },
+    baseline: { columns: { id: {}, region: { allowed: values.slice(0, 4) } } },
+  })
+  const region = columnNamed(report, 'region')
+  assert.equal(region.categories.truncated, true)
+  assert.equal(region.categories.distinct, 4)
+  assert.equal(region.categories.notIndexed, 27)
+  const withheld = findingsFor(report, 'category-comparison-incomplete')
+  assert.ok(withheld[0].message.startsWith('27 value or values in region were not added'))
+  assert.equal(report.status, 'incomplete')
+})
+
+test('a value too long for the index and a value dropped by the cap are both counted', async () => {
+  // Two different reasons evidence was lost, in one column: the count is their
+  // sum, and neither is left out because the other was easier to reach.
+  const report = await profileText(regions(['alpha', 'bravo', 'x'.repeat(9), 'charlie']), {
+    config: { limits: { maxDistinctCategories: 2, maxCategoryLength: 8 } },
+    baseline: { columns: { id: {}, region: { allowed: ['alpha', 'bravo'] } } },
+  })
+  const region = columnNamed(report, 'region')
+  assert.equal(region.values.categoryOversized, 1)
+  assert.equal(region.categories.truncated, true)
+  assert.equal(region.categories.notIndexed, 2)
 })
 
 test('a value that cannot be indexed withholds the drift number rather than computing one from a gap', async () => {

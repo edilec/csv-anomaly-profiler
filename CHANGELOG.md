@@ -27,6 +27,13 @@ public surface: renaming one is a breaking change and is recorded as such.
   member of the unsafe set still makes a value unprintable, and a column name
   still forgives none of them.
 
+- `category-comparison-incomplete` reported the amount of dropped evidence as
+  zero whenever the index had been dropped by the distinct-value cap: *"0 value
+  or values in region were not added to the index this comparison uses, and the
+  index reached its size limit"*. The values the cap discards are now counted
+  where they are discarded, so `categories.notIndexed` and the message state the
+  count a reader would arrive at by hand.
+
 - A blank line between data rows was `row-field-count-mismatch` at error
   severity and exit 2. A line holding nothing at all carries no value to
   attribute, so it is now skipped, counted in `summary.rowsBlank` and named by
