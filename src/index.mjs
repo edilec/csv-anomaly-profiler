@@ -107,6 +107,25 @@ export const REPORT_SCHEMA_VERSION = '1'
 /** How many category values a column entry shows. */
 export const MAX_TOP_CATEGORIES = 10
 
+/**
+ * Why a column's drift was not compared, as `drift.reason` reports it.
+ *
+ * Each names the document or the evidence that was actually missing. That
+ * matters more than it looks: a reason assigned in advance and cleared on the
+ * paths that compare reported `baseline-entry-declares-nothing` for entries
+ * that declared something, sending a consumer to correct the baseline when the
+ * gap was in the file. When more than one declared comparison is withheld, the
+ * reason is the first in this order; the per-comparison fields say which of
+ * them produced a number.
+ */
+export const DRIFT_REASONS = Object.freeze([
+  'no-baseline',
+  'no-baseline-entry',
+  'baseline-entry-declares-nothing',
+  'no-values-observed',
+  'observed-index-incomplete',
+])
+
 export const DISCLAIMER =
   'This report describes one delimited file that was supplied to it. The tool opens no connection, runs no query '
   + 'and resolves no host. A value it reports as an outlier is a value outside a robust fence computed from the '
@@ -452,17 +471,25 @@ function columnReport(column, config, baseline, file) {
     ))
   }
 
+  // Why a declared comparison was not made, in the order the comparisons are
+  // attempted. Assigning a reason in advance and clearing it on the paths that
+  // compare is how `baseline-entry-declares-nothing` came to be reported for
+  // entries that declared something: the reason named the wrong document, and a
+  // consumer filtering on it was sent to correct the baseline instead of the
+  // gap in the evidence.
+  const withheld = []
+
   if (baselineEntry !== undefined) {
     // `compared` says whether a comparison was actually made, not whether an
     // entry existed to make one from. A baseline entry that declares nothing
     // compares nothing, and reporting that as compared would be the quiet half
     // of a claim this run cannot support.
-    drift = { compared: false, reason: 'baseline-entry-declares-nothing', missingRate: null, categories: null }
+    drift = { compared: false, reason: null, missingRate: null, categories: null }
+    if (baselineEntry.missingRate !== null && missingRate === null) withheld.push('no-values-observed')
     if (baselineEntry.missingRate !== null && missingRate !== null) {
       const delta = num(Math.abs(missingRate - baselineEntry.missingRate))
       drift.missingRate = { baseline: baselineEntry.missingRate, observed: missingRate, delta }
       drift.compared = true
-      drift.reason = null
       if (delta > config.maxMissingRateDrift) {
         findings.push(makeFinding(
           'missingness-drift',
@@ -546,12 +573,11 @@ function columnReport(column, config, baseline, file) {
       }
 
       if (baselineEntry.categories !== null) {
-        if (indexComplete) {
-          const distance = categoryDistance(column, baselineEntry.categories)
+        const distance = indexComplete ? categoryDistance(column, baselineEntry.categories) : null
+        if (distance !== null) {
           drift.categories = { distance, threshold: config.maxCategoryDrift }
           drift.compared = true
-          drift.reason = null
-          if (distance !== null && distance > config.maxCategoryDrift) {
+          if (distance > config.maxCategoryDrift) {
             findings.push(makeFinding(
               'category-drift',
               msg`The distribution of ${column.name} is ${String(distance)} away from the baseline by
@@ -560,17 +586,27 @@ function columnReport(column, config, baseline, file) {
             ))
           }
         } else {
-          // A distance computed from an index that dropped evidence is a number
-          // with no meaning. None is reported.
+          // A distance computed from an index that dropped evidence, or from no
+          // observed value at all, is a number with no meaning. None is
+          // reported, and the reason names the side that could not supply it.
+          withheld.push(indexComplete ? 'no-values-observed' : 'observed-index-incomplete')
           findings.push(makeFinding(
             'drift-undetermined',
-            msg`The distribution of ${column.name} was not compared with the baseline, because the index
-                this run built for it does not hold every value the column contained.`,
+            msg`The distribution of ${column.name} was not compared with the baseline, because
+                ${indexComplete
+                  ? msg`this run observed no value in the column to compare`
+                  : msg`the index this run built for it does not hold every value the column contained`}.`,
             at(file, pointer),
             { suggestion: 'Raise the category limits deliberately, or correct the values that could not be indexed.' },
           ))
         }
       }
+    }
+
+    // Nothing was compared, so the report has to say why -- and say it about
+    // whichever document or piece of evidence was actually missing.
+    if (!drift.compared) {
+      drift.reason = withheld.length === 0 ? 'baseline-entry-declares-nothing' : withheld[0]
     }
   }
 
@@ -928,6 +964,7 @@ export const CATALOG = Object.freeze({
   maxBaselineBytes: MAX_BASELINE_BYTES,
   maxMissingTokens: MAX_MISSING_TOKENS,
   maxTopCategories: MAX_TOP_CATEGORIES,
+  driftReasons: DRIFT_REASONS,
   baselineKeys: BASELINE_KEYS,
   baselineColumnKeys: BASELINE_COLUMN_KEYS,
   distributionTolerance: DISTRIBUTION_TOLERANCE,

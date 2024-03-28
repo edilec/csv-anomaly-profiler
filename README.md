@@ -168,6 +168,22 @@ whether a comparison was actually made rather than whether an entry existed to
 make one from. An entry that declares nothing compares nothing, and the report
 says so.
 
+When nothing was compared, `drift.reason` names the document or the evidence
+that was missing -- and names the right one, because a consumer filtering on it
+is deciding which file to go and correct:
+
+| `drift.reason` | Meaning |
+| --- | --- |
+| `no-baseline` | the run was given no baseline |
+| `no-baseline-entry` | the baseline has no entry for this column |
+| `baseline-entry-declares-nothing` | the entry exists and declares neither `missingRate` nor `categories` |
+| `no-values-observed` | the entry declares a comparison and the file supplied no value to make it from |
+| `observed-index-incomplete` | the entry declares `categories` and the observed index dropped a value, so a distance would be a number with no meaning |
+
+When more than one declared comparison is withheld the reason is the first in
+that order, and `drift.missingRate` and `drift.categories` say which of them
+produced a number.
+
 ## Input: the configuration
 
 ```json

@@ -27,6 +27,17 @@ public surface: renaming one is a breaking change and is recorded as such.
   member of the unsafe set still makes a value unprintable, and a column name
   still forgives none of them.
 
+- `drift.reason` reported `baseline-entry-declares-nothing` for entries that
+  declared something. The reason was assigned once and cleared only on the paths
+  that compare, so a baseline declaring `categories` over an incomplete index,
+  and one declaring `missingRate` over a file with no data rows, both blamed the
+  baseline for a gap in the evidence -- sending a consumer to correct the
+  document that was not at fault. The reason is now derived from what actually
+  happened, and the vocabulary is documented and exported as `DRIFT_REASONS`.
+- `drift.compared` was `true` with `drift.categories.distance` `null` when the
+  observed index was whole and empty -- every value in the column missing. A
+  comparison is now reported as made only when a number came out of it.
+
 - `category-comparison-incomplete` reported the amount of dropped evidence as
   zero whenever the index had been dropped by the distinct-value cap: *"0 value
   or values in region were not added to the index this comparison uses, and the
@@ -43,7 +54,7 @@ public surface: renaming one is a breaking change and is recorded as such.
 ### Added
 
 - `category-whitespace-collapsed` (info), `blank-line-skipped` (info),
-  `values.reshaped` and `summary.rowsBlank`.
+  `values.reshaped`, `summary.rowsBlank` and the `DRIFT_REASONS` vocabulary.
 
 ## 0.1.0
 

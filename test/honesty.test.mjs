@@ -15,6 +15,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { CATALOG } from '../src/index.mjs'
 import { columnNamed, csvText, findingsFor, profileText, ruleIds, runCli, withTempDir, writeText } from './helpers.mjs'
 
 const CONTROL = String.fromCharCode(0x01)
@@ -167,8 +168,77 @@ test('a value that cannot be indexed withholds the drift number rather than comp
   // No distance at all: a distance computed against an index that dropped a
   // value is a number with no meaning, and printing one would be the invention.
   assert.equal(region.drift.categories, null)
+  // The companion the absence needs: an assertion that pins what IS there. The
+  // baseline entry declares `categories`, so blaming the baseline for this gap
+  // would send a consumer to correct the document that was not at fault.
+  assert.equal(region.drift.compared, false)
+  assert.equal(region.drift.reason, 'observed-index-incomplete')
   assert.ok(ruleIds(report).includes('drift-undetermined'))
   assert.ok(ruleIds(report).includes('value-unprintable'))
+  assert.equal(report.status, 'incomplete')
+})
+
+test('every drift reason names the document or the evidence that was actually missing', async () => {
+  const declared = { categories: { north: 0.5, south: 0.5 } }
+  const clean = regions(['north', 'south'])
+  const seen = new Set()
+
+  const cases = [
+    // no baseline at all
+    [clean, null, 'no-baseline'],
+    // a baseline that says nothing about this column
+    [clean, { columns: { id: {} } }, 'no-baseline-entry'],
+    // an entry that exists and declares neither comparison
+    [clean, { columns: { id: {}, region: {} } }, 'baseline-entry-declares-nothing'],
+    // an entry that declares a rate over a file with no value to compare
+    ['id,region\n', { columns: { id: {}, region: { missingRate: 0.1 } } }, 'no-values-observed'],
+    // an entry that declares a distribution over a column of nothing but
+    // missing values: the index is whole and holds no value to compare
+    [regions(['', '']), { columns: { id: {}, region: { categories: { north: 1 } } } }, 'no-values-observed'],
+    // an entry that declares a distribution the observed index cannot answer
+    [regions(['north', `south${CONTROL}`]), { columns: { id: {}, region: declared } }, 'observed-index-incomplete'],
+  ]
+
+  for (const [document, baseline, expected] of cases) {
+    const report = await profileText(document, { baseline })
+    const region = columnNamed(report, 'region')
+    assert.equal(region.drift.compared, false, expected)
+    assert.equal(region.drift.reason, expected, expected)
+    seen.add(expected)
+  }
+
+  // Every documented reason is reachable, and no reason is documented that
+  // nothing produces.
+  assert.deepEqual([...seen].sort(), [...CATALOG.driftReasons].sort())
+
+  // And an entry that declares TWO comparisons where only one can be made is
+  // compared, not withheld: the reason exists for the case where nothing came
+  // out at all.
+  const partly = await profileText(regions(['north', `south${CONTROL}`]), {
+    baseline: {
+      columns: { id: {}, region: { missingRate: 0, categories: { north: 0.5, south: 0.5 } } },
+    },
+  })
+  const region = columnNamed(partly, 'region')
+  assert.equal(region.drift.compared, true)
+  assert.equal(region.drift.reason, null)
+  assert.equal(region.drift.missingRate.observed, 0)
+  assert.equal(region.drift.categories, null)
+})
+
+test('a comparison is reported as made only when a number came out of it', async () => {
+  // The index is whole and empty: every value in the column is missing. A
+  // comparison "made" with a null distance beside it is the same invention as
+  // one computed from a gap, arriving through the other door.
+  const report = await profileText(regions(['', '']), {
+    baseline: { columns: { id: {}, region: { categories: { north: 1 } } } },
+  })
+  const region = columnNamed(report, 'region')
+  assert.equal(region.categories.indexComplete, true)
+  assert.equal(region.categories.distinct, 0)
+  assert.equal(region.drift.compared, false)
+  assert.equal(region.drift.categories, null)
+  assert.ok(findingsFor(report, 'drift-undetermined')[0].message.includes('observed no value in the column'))
   assert.equal(report.status, 'incomplete')
 })
 
