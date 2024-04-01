@@ -84,6 +84,33 @@ it pass in silence.
 A column NAME forgives none of them, layout included. A name is an identity, and
 `a<TAB>b` and `a b` printing the same text would silently become one column.
 
+## A subset of the file is not the file
+
+The row bound stops the reader at `maxRows`, and a malformed or ragged row is
+read and not attributed. What the columns then hold is a subset, and every
+number computed from a subset describes the subset -- which the report went on
+to present as a fact about the file:
+
+```
+missingness-drift   error   region is missing at a rate of 0 and the baseline
+                            records 0.8, a change of 0.8
+```
+
+The file's real missing rate was 0.8. Twenty of its hundred rows had been read.
+
+The rule this tool already applied to the category index applies here too, and
+it has two halves. A value this run SAW outside a fence it computed is not in
+doubt, so the outlier findings stand. What cannot be claimed is the opposite:
+that the column holds nothing else. So `numeric.verdict` becomes `partial`, the
+rate comparisons are withheld with a reason naming the unread rows, and
+`evidence` on every column entry says what its numbers cover.
+
+The invariant that keeps `partial` from becoming a quiet second kind of pass:
+every reason a verdict is partial -- a row past the limit, a malformed row, a
+ragged row, an unterminated quote, a value too long to read, a value that does
+not print -- also raises a finding in the unsettled set, so the run is
+`incomplete` and exits 2. There is a test that drives all six.
+
 ## A blank line is not a ragged row
 
 The reader hands a blank line to the profiler as a row of one empty field,

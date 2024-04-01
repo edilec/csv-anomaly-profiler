@@ -122,6 +122,7 @@ export const DRIFT_REASONS = Object.freeze([
   'no-baseline',
   'no-baseline-entry',
   'baseline-entry-declares-nothing',
+  'file-not-profiled-in-full',
   'no-values-observed',
   'observed-index-incomplete',
 ])
@@ -147,6 +148,7 @@ const EMPTY_SUMMARY = Object.freeze({
   rowsBlank: 0,
   columns: 0,
   columnsEvaluated: 0,
+  columnsPartial: 0,
   columnsUndetermined: 0,
   outliers: 0,
 })
@@ -338,14 +340,27 @@ function headerFindings(problem, file, config) {
   )]
 }
 
-function columnReport(column, config, baseline, file) {
+function columnReport(column, config, baseline, file, rowsComplete) {
   const findings = []
   const pointer = pointerForColumn(column.name)
   const examined = examinedCount(column)
   const type = typeOf(column)
   const missingRate = missingRateOf(column)
-  const numeric = numericVerdict(column, config)
-  const indexComplete = categoryIndexComplete(column)
+  // What this column's numbers actually cover.
+  //
+  // The rate of MISSING values is exact when no row was skipped and no value in
+  // the column was cut short -- and only then, because a value that was cut
+  // short was never compared with the missing tokens, so it might have been
+  // one. A fence needs more: every value that reached the profile must also
+  // have been examinable, or the fence describes a subset of the column.
+  //
+  // Both are here rather than at the call sites because a rate computed from
+  // the first twenty rows of a hundred-row file is not the file's rate, and
+  // reporting a drift from it was a claim about a file this run never read.
+  const missingRateExact = rowsComplete && column.oversized === 0
+  const valuesComplete = missingRateExact && column.unprintable === 0
+  const numeric = numericVerdict(column, config, valuesComplete)
+  const indexComplete = categoryIndexComplete(column, rowsComplete)
   const baselineEntry = baseline === null ? undefined : baseline.columns.get(column.name)
 
   if (column.oversized > 0) {
@@ -416,7 +431,7 @@ function columnReport(column, config, baseline, file) {
       { suggestion: 'More than half of the values examined are identical; look at the column itself.' },
     ))
   }
-  if (numeric !== null && numeric.verdict === 'evaluated') {
+  if (numeric !== null && numeric.examples !== undefined) {
     for (const example of numeric.examples) {
       // The two methods report different quantities, and saying so is the point
       // of naming the method at all. Under `mad` the score IS the statistic the
@@ -447,7 +462,7 @@ function columnReport(column, config, baseline, file) {
       ))
     }
   }
-  if (missingRate !== null && missingRate > config.maxMissingRate) {
+  if (missingRateExact && missingRate !== null && missingRate > config.maxMissingRate) {
     findings.push(makeFinding(
       'missingness-above-threshold',
       msg`${column.name} is missing in ${String(column.missing)} of ${String(column.total)} rows
@@ -478,6 +493,18 @@ function columnReport(column, config, baseline, file) {
   // consumer filtering on it was sent to correct the baseline instead of the
   // gap in the evidence.
   const withheld = []
+  // A comparison the baseline asked for and this run did not make is a gap, and
+  // it is reported as one wherever it happens -- including when the OTHER
+  // comparison in the same entry did produce a number.
+  const withhold = (reason, what, why) => {
+    withheld.push(reason)
+    findings.push(makeFinding(
+      'drift-undetermined',
+      msg`The ${what} of ${column.name} was not compared with the baseline, because ${why}.`,
+      at(file, pointer),
+      { suggestion: 'Profile the whole file, or correct the values this run could not read.' },
+    ))
+  }
 
   if (baselineEntry !== undefined) {
     // `compared` says whether a comparison was actually made, not whether an
@@ -485,8 +512,18 @@ function columnReport(column, config, baseline, file) {
     // compares nothing, and reporting that as compared would be the quiet half
     // of a claim this run cannot support.
     drift = { compared: false, reason: null, missingRate: null, categories: null }
-    if (baselineEntry.missingRate !== null && missingRate === null) withheld.push('no-values-observed')
-    if (baselineEntry.missingRate !== null && missingRate !== null) {
+    if (baselineEntry.missingRate !== null && !missingRateExact) {
+      withhold(
+        'file-not-profiled-in-full',
+        msg`missing rate`,
+        rowsComplete
+          ? msg`a value in it was too long to read, so it was never compared with the missing tokens`
+          : msg`this run did not profile every row of the file`,
+      )
+    } else if (baselineEntry.missingRate !== null && missingRate === null) {
+      withhold('no-values-observed', msg`missing rate`, msg`this run observed no row in the column`)
+    }
+    if (baselineEntry.missingRate !== null && missingRateExact && missingRate !== null) {
       const delta = num(Math.abs(missingRate - baselineEntry.missingRate))
       drift.missingRate = { baseline: baselineEntry.missingRate, observed: missingRate, delta }
       drift.compared = true
@@ -589,16 +626,17 @@ function columnReport(column, config, baseline, file) {
           // A distance computed from an index that dropped evidence, or from no
           // observed value at all, is a number with no meaning. None is
           // reported, and the reason names the side that could not supply it.
-          withheld.push(indexComplete ? 'no-values-observed' : 'observed-index-incomplete')
-          findings.push(makeFinding(
-            'drift-undetermined',
-            msg`The distribution of ${column.name} was not compared with the baseline, because
-                ${indexComplete
-                  ? msg`this run observed no value in the column to compare`
-                  : msg`the index this run built for it does not hold every value the column contained`}.`,
-            at(file, pointer),
-            { suggestion: 'Raise the category limits deliberately, or correct the values that could not be indexed.' },
-          ))
+          if (indexComplete) {
+            withhold('no-values-observed', msg`distribution`, msg`this run observed no value in the column to compare`)
+          } else if (rowsComplete) {
+            withhold(
+              'observed-index-incomplete',
+              msg`distribution`,
+              msg`the index this run built for it does not hold every value the column contained`,
+            )
+          } else {
+            withhold('file-not-profiled-in-full', msg`distribution`, msg`this run did not profile every row of the file`)
+          }
         }
       }
     }
@@ -626,6 +664,7 @@ function columnReport(column, config, baseline, file) {
       categoryOversized: column.categoryOversized,
       reshaped: column.reshaped,
     },
+    evidence: { rowsComplete, missingRateExact, valuesComplete },
     missingRate,
     numeric,
     categories,
@@ -849,9 +888,18 @@ export async function profileCsv({ csv, config: configPath = null, baseline: bas
     }
   }
 
+  // Every data row in the file reached a column. A row past the limit was never
+  // read; a malformed or ragged row was read and could not be attributed. In
+  // all three cases what the columns hold is a subset of the file, and a rate
+  // or a fence computed from a subset describes the subset.
+  const rowsComplete = !state.truncated
+    && state.malformed === 0
+    && state.mismatched === 0
+    && !state.unterminatedQuote
+
   const entries = []
   for (const column of state.columns) {
-    const built = columnReport(column, config, baseline, file)
+    const built = columnReport(column, config, baseline, file, rowsComplete)
     entries.push(built.entry)
     findings.push(...built.findings)
   }
@@ -860,13 +908,16 @@ export async function profileCsv({ csv, config: configPath = null, baseline: bas
 
   let outliers = 0
   let evaluated = 0
+  let partial = 0
   let undetermined = 0
   for (const entry of entries) {
     if (entry.numeric === null) continue
-    if (entry.numeric.verdict === 'evaluated') {
-      evaluated += 1
+    if (entry.numeric.verdict === 'undetermined') undetermined += 1
+    else {
+      if (entry.numeric.verdict === 'evaluated') evaluated += 1
+      else partial += 1
       outliers += entry.numeric.outlierCount
-    } else undetermined += 1
+    }
   }
 
   return envelope({
@@ -880,6 +931,7 @@ export async function profileCsv({ csv, config: configPath = null, baseline: bas
       rowsBlank: state.blankLines,
       columns: entries.length,
       columnsEvaluated: evaluated,
+      columnsPartial: partial,
       columnsUndetermined: undetermined,
       outliers,
     },
@@ -933,7 +985,8 @@ export function formatSummary(report) {
   )
   lines.push(
     `${report.summary.columnsEvaluated} column(s) got a numeric verdict under "${report.configuration.method}", `
-    + `${report.summary.columnsUndetermined} did not; ${report.summary.outliers} value(s) outside the fence.`,
+    + `${report.summary.columnsPartial} got one over part of the column, `
+    + `${report.summary.columnsUndetermined} got none; ${report.summary.outliers} value(s) outside the fence.`,
   )
   lines.push(
     `${report.summary.errors} error, ${report.summary.warnings} warning, ${report.summary.info} info. `

@@ -29,7 +29,14 @@ import {
 import { byCodeUnit, hasUnprintableCharacter, num, renderedForm } from './text.mjs'
 
 export const COLUMN_TYPES = Object.freeze(['numeric', 'categorical', 'mixed', 'undetermined'])
-export const VERDICTS = Object.freeze(['evaluated', 'undetermined'])
+/**
+ * `partial` is the numeric counterpart of an incomplete category index: a fence
+ * was placed and the values outside it are reported, but they were computed
+ * from a subset of the column, so the ABSENCE of a value outside the fence
+ * establishes nothing. Reporting that as `evaluated` said the column had been
+ * evaluated when four fifths of it had never been read.
+ */
+export const VERDICTS = Object.freeze(['evaluated', 'partial', 'undetermined'])
 
 /**
  * What this tool accepts as a number.
@@ -147,8 +154,14 @@ export function typeOf(column) {
  *
  * Nothing below computes a score until the sample and the dispersion have both
  * been established, and neither check has a path that produces a number anyway.
+ *
+ * `valuesComplete` says whether every value the column holds reached this
+ * function. When it did not, the verdict is `partial`: the values outside the
+ * fence are still reported -- a value this run SAW outside a fence it computed
+ * is not in doubt -- but the column has not been evaluated, and the field a
+ * consumer reads to ask whether it has must not say that it was.
  */
-export function numericVerdict(column, config) {
+export function numericVerdict(column, config, valuesComplete = true) {
   const kind = typeOf(column)
   if (kind === 'categorical') return null
   if (kind === 'undetermined') {
@@ -217,8 +230,8 @@ export function numericVerdict(column, config) {
   outliers.sort((a, b) => Math.abs(b.score) - Math.abs(a.score) || a.row - b.row)
 
   return {
-    verdict: 'evaluated',
-    reason: null,
+    verdict: valuesComplete ? 'evaluated' : 'partial',
+    reason: valuesComplete ? null : 'evidence-incomplete',
     method: config.method,
     examined,
     median: num(centre),
@@ -248,10 +261,17 @@ export function numericVerdict(column, config) {
  * a value seen and not permitted is a value seen and not permitted, whatever
  * else was dropped -- but the opposite claim, that the column contains nothing
  * unexpected, is not available and is not made.
+ *
+ * `rowsComplete` is required rather than defaulted, and it is the file-level
+ * half of the same question: an index built from the first twenty rows of a
+ * hundred-row file holds every value it was offered and still does not hold
+ * every value the column contains. A default of `true` here would be the
+ * unsafe answer handed to whoever forgot to ask.
  */
-export function categoryIndexComplete(column) {
+export function categoryIndexComplete(column, rowsComplete) {
   return (
     column.tracksCategories
+    && rowsComplete === true
     && !column.categoriesTruncated
     && column.categoryOversized === 0
     && column.oversized === 0

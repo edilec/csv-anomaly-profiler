@@ -197,10 +197,13 @@ test('every drift reason names the document or the evidence that was actually mi
     [regions(['', '']), { columns: { id: {}, region: { categories: { north: 1 } } } }, 'no-values-observed'],
     // an entry that declares a distribution the observed index cannot answer
     [regions(['north', `south${CONTROL}`]), { columns: { id: {}, region: declared } }, 'observed-index-incomplete'],
+    // an entry that declares a rate over a file whose rows were not all read
+    [regions(['north', 'south', 'north']), { columns: { id: {}, region: { missingRate: 0.5 } } },
+      'file-not-profiled-in-full', { limits: { maxRows: 2 } }],
   ]
 
-  for (const [document, baseline, expected] of cases) {
-    const report = await profileText(document, { baseline })
+  for (const [document, baseline, expected, config = null] of cases) {
+    const report = await profileText(document, { baseline, config })
     const region = columnNamed(report, 'region')
     assert.equal(region.drift.compared, false, expected)
     assert.equal(region.drift.reason, expected, expected)
@@ -252,6 +255,150 @@ test('a complete index does get its drift number, so the refusal above is not bl
     assert.equal(ruleIds(report).includes('drift-undetermined'), false)
     assert.equal(report.status, 'pass')
   })
+})
+
+const STEADY = Array.from({ length: 24 }, (_, index) => 50 + (index % 3))
+
+function readings(values) {
+  return csvText(['id', 'reading'], values.map((value, index) => [`S-${index + 1}`, value]))
+}
+
+test('a verdict over part of a column is not a verdict about the column', async () => {
+  // Twenty of a hundred rows read, and the planted value sits in the part that
+  // was never read. The fence is real and so is every value outside it, but the
+  // ABSENCE of one establishes nothing -- and `verdict` is the field a consumer
+  // reads to ask whether the column was evaluated.
+  const values = [...STEADY, ...STEADY, 9999]
+  const report = await profileText(readings(values), { config: { limits: { maxRows: 24 } } })
+  const reading = columnNamed(report, 'reading')
+
+  assert.equal(reading.numeric.verdict, 'partial')
+  assert.equal(reading.numeric.reason, 'evidence-incomplete')
+  assert.equal(reading.numeric.examined, 24)
+  assert.equal(reading.numeric.outlierCount, 0)
+  assert.equal(reading.evidence.rowsComplete, false)
+  assert.equal(reading.evidence.valuesComplete, false)
+  assert.equal(report.summary.columnsEvaluated, 0)
+  assert.equal(report.summary.columnsPartial, 1)
+  assert.equal(report.summary.columnsUndetermined, 0)
+  assert.ok(ruleIds(report).includes('row-limit-exceeded'))
+  assert.equal(report.status, 'incomplete')
+})
+
+test('a partial verdict still reports every value it DID see outside the fence', async () => {
+  // The positive half stands, exactly as it does for a truncated category
+  // index: a value this run saw outside a fence it computed is not in doubt.
+  const values = [...STEADY, 9999, ...STEADY]
+  const report = await profileText(readings(values), { config: { limits: { maxRows: 25 } } })
+  const reading = columnNamed(report, 'reading')
+  assert.equal(reading.numeric.verdict, 'partial')
+  assert.equal(reading.numeric.outlierCount, 1)
+  assert.equal(reading.numeric.examples[0].value, 9999)
+  assert.equal(report.summary.outliers, 1)
+  assert.equal(findingsFor(report, 'numeric-outlier').length, 1)
+  // Incomplete outranks fail: the run did not establish what the file holds.
+  assert.equal(report.status, 'incomplete')
+})
+
+test('a partial verdict can never appear in a green run', async () => {
+  // Every reason a verdict is partial -- a row past the limit, a malformed row,
+  // a ragged row, an unterminated quote, a value too long, a value that does
+  // not print -- also raises a finding in the unsettled set. The invariant is
+  // what keeps `partial` from becoming a quiet second kind of pass.
+  const cases = [
+    [readings([...STEADY, ...STEADY]), { limits: { maxRows: 24 } }],
+    [`${readings(STEADY)}S-25,"unclosed\n`, null],
+    [`${readings(STEADY)}S-25,50,extra\n`, null],
+    [`${readings(STEADY)}S-25,"5"0\n`, null],
+    [readings([...STEADY.slice(0, 23), '123456789']), { limits: { maxFieldLength: 8 } }],
+    [readings([...STEADY.slice(0, 23), `4${CONTROL}2`]), null],
+  ]
+  for (const [document, config] of cases) {
+    const report = await profileText(document, { config })
+    const reading = columnNamed(report, 'reading')
+    assert.notEqual(reading.numeric.verdict, 'evaluated', document.slice(-24))
+    assert.equal(report.status, 'incomplete', document.slice(-24))
+  }
+})
+
+test('a rate compared from part of a file is not compared at all', async () => {
+  // The sharpest form of the invention: the file's real missing rate IS the
+  // baseline's, and a drift computed from the first twenty rows reported a
+  // change of 0.8 at error severity -- a claim about a file this run never read.
+  const values = Array.from({ length: 100 }, (_, index) => (index < 20 ? 'north' : ''))
+  const report = await profileText(regions(values), {
+    config: { limits: { maxRows: 20 } },
+    baseline: { columns: { id: {}, region: { missingRate: 0.8 } } },
+  })
+  const region = columnNamed(report, 'region')
+  assert.equal(region.missingRate, 0)
+  assert.equal(findingsFor(report, 'missingness-drift').length, 0)
+  assert.equal(findingsFor(report, 'missingness-above-threshold').length, 0)
+  assert.equal(region.drift.compared, false)
+  assert.equal(region.drift.missingRate, null)
+  assert.equal(region.drift.reason, 'file-not-profiled-in-full')
+  assert.ok(findingsFor(report, 'drift-undetermined')[0].message.includes('did not profile every row'))
+  assert.equal(report.status, 'incomplete')
+})
+
+test('a missingness threshold is not judged from the rows that happened to be read', async () => {
+  // The first ten rows are empty and the other ninety are not: the file's rate
+  // is 0.1 and the prefix's is 1. Judging the threshold from the prefix reports
+  // a column as mostly missing when it is mostly present.
+  const values = Array.from({ length: 100 }, (_, index) => (index < 10 ? '' : 'north'))
+  const partial = await profileText(regions(values), { config: { limits: { maxRows: 10 } } })
+  const region = columnNamed(partial, 'region')
+  assert.equal(region.missingRate, 1)
+  assert.equal(region.evidence.missingRateExact, false)
+  assert.equal(findingsFor(partial, 'missingness-above-threshold').length, 0)
+  assert.equal(partial.status, 'incomplete')
+
+  // Read in full the same file is under the threshold, and a file that really
+  // is over it is still reported: the gate withholds a verdict, it does not
+  // disable the check.
+  const full = await profileText(regions(values))
+  assert.equal(full.missingRate, undefined)
+  assert.equal(columnNamed(full, 'region').missingRate, 0.1)
+  assert.equal(findingsFor(full, 'missingness-above-threshold').length, 0)
+  assert.equal(full.status, 'pass')
+
+  const over = await profileText(regions(values.map((value, index) => (index < 30 ? '' : value))))
+  assert.equal(findingsFor(over, 'missingness-above-threshold').length, 1)
+  assert.equal(over.status, 'fail')
+})
+
+test('a distribution is not compared from the rows that happened to be read', async () => {
+  // The index holds every value it was OFFERED and still does not hold every
+  // value the column contains, because the reader stopped at row twenty.
+  const values = Array.from({ length: 100 }, (_, index) => (index < 50 ? 'north' : 'south'))
+  const baseline = { columns: { id: {}, region: { categories: { north: 0.5, south: 0.5 } } } }
+  const partial = await profileText(regions(values), { config: { limits: { maxRows: 20 } }, baseline })
+  const region = columnNamed(partial, 'region')
+  assert.equal(region.categories.indexComplete, false)
+  assert.equal(region.drift.categories, null)
+  assert.equal(region.drift.reason, 'file-not-profiled-in-full')
+  assert.equal(findingsFor(partial, 'category-drift').length, 0)
+  assert.ok(findingsFor(partial, 'drift-undetermined')[0].message.includes('did not profile every row'))
+  assert.equal(partial.status, 'incomplete')
+
+  // Read in full, the distribution IS the baseline's and the distance is 0.
+  const full = await profileText(regions(values), { baseline })
+  assert.equal(columnNamed(full, 'region').categories.indexComplete, true)
+  assert.equal(columnNamed(full, 'region').drift.categories.distance, 0)
+  assert.equal(full.status, 'pass')
+})
+
+test('the same file read in full does compare the rate, so the refusal above is not blanket', async () => {
+  const values = Array.from({ length: 100 }, (_, index) => (index < 20 ? 'north' : ''))
+  const report = await profileText(regions(values), {
+    baseline: { columns: { id: {}, region: { missingRate: 0.8 } } },
+  })
+  const region = columnNamed(report, 'region')
+  assert.equal(region.evidence.missingRateExact, true)
+  assert.equal(region.missingRate, 0.8)
+  assert.equal(region.drift.compared, true)
+  assert.equal(region.drift.missingRate.delta, 0)
+  assert.equal(findingsFor(report, 'missingness-drift').length, 0)
 })
 
 test('a row that does not match the header is not attributed to any column', async () => {

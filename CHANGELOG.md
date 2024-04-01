@@ -27,6 +27,16 @@ public surface: renaming one is a breaking change and is recorded as such.
   member of the unsafe set still makes a value unprintable, and a column name
   still forgives none of them.
 
+- A comparison made against a partially read file was reported as a comparison
+  that was made. With the row bound stopping the read at 20 of 100 rows,
+  `missingness-drift` was raised at error severity with a delta of 0.8 -- on a
+  file whose real missing rate was exactly the baseline's -- and
+  `numeric.verdict` stayed `evaluated` with `outlierCount: 0` over a column
+  four fifths of which had never been read. Every rate and distribution
+  comparison is now gated on the evidence actually obtained, the numeric verdict
+  has a third state `partial`, `summary.columnsPartial` counts it, and each
+  column entry carries an `evidence` object saying what its numbers cover.
+
 - `drift.reason` reported `baseline-entry-declares-nothing` for entries that
   declared something. The reason was assigned once and cleared only on the paths
   that compare, so a baseline declaring `categories` over an incomplete index,
@@ -54,7 +64,8 @@ public surface: renaming one is a breaking change and is recorded as such.
 ### Added
 
 - `category-whitespace-collapsed` (info), `blank-line-skipped` (info),
-  `values.reshaped`, `summary.rowsBlank` and the `DRIFT_REASONS` vocabulary.
+  `values.reshaped`, `summary.rowsBlank`, `summary.columnsPartial`,
+  `column.evidence`, the `partial` verdict and the `DRIFT_REASONS` vocabulary.
 
 ## 0.1.0
 

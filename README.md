@@ -73,7 +73,9 @@ dressed up as what the grammar meant:
 | A lone `CR` | Kept as data, not a record separator | A deviation, for the same reason: `non-escaped` excludes `CR`. Keeping it costs nothing, because a carriage return is layout: the value is examined and printed with its whitespace collapsed, and the difference is counted in `values.reshaped` |
 
 A row whose field count does not match the header is **not** spread across the
-columns on a guess about which field is missing: it is reported and skipped.
+columns on a guess about which field is missing: it is reported and skipped. A
+rate or a fence is then computed over a subset of the file, so neither is
+reported as a comparison that was made: see `evidence` below.
 
 A line holding nothing at all is not such a row -- it is not a row. It carries no
 value to attribute, every reader of this format skips it, and a text editor
@@ -177,6 +179,7 @@ is deciding which file to go and correct:
 | `no-baseline` | the run was given no baseline |
 | `no-baseline-entry` | the baseline has no entry for this column |
 | `baseline-entry-declares-nothing` | the entry exists and declares neither `missingRate` nor `categories` |
+| `file-not-profiled-in-full` | the entry declares a comparison and this run did not profile every row of the file, or a value in the column was too long to read |
 | `no-values-observed` | the entry declares a comparison and the file supplied no value to make it from |
 | `observed-index-incomplete` | the entry declares `categories` and the observed index dropped a value, so a distance would be a number with no meaning |
 
@@ -238,6 +241,12 @@ deviation puts it at a modified z-score of 3.12, inside the default threshold.
 | `mixed` | some did and some did not. No numeric verdict is reported |
 | `undetermined` | no value was examined at all |
 
+| Verdict | Meaning |
+| --- | --- |
+| `evaluated` | a fence was placed over every value the column holds |
+| `partial` | a fence was placed over the values this run could read, and the column holds others it could not |
+| `undetermined` | no fence was placed, and `reason` says why |
+
 ## What a column entry carries
 
 ```json
@@ -248,6 +257,7 @@ deviation puts it at a modified z-score of 3.12, inside the default threshold.
   "type": "numeric",
   "values": { "total": 24, "missing": 0, "examined": 24, "numeric": 24, "other": 0,
               "oversized": 0, "unprintable": 0, "categoryOversized": 0, "reshaped": 0 },
+  "evidence": { "rowsComplete": true, "missingRateExact": true, "valuesComplete": true },
   "missingRate": 0,
   "numeric": { "verdict": "evaluated", "reason": null, "method": "mad", "examined": 24,
                "median": 42, "dispersion": 2, "threshold": 3.5, "constant": 0.6745,
@@ -260,10 +270,22 @@ deviation puts it at a modified z-score of 3.12, inside the default threshold.
 
 - `values.examined` is the total less everything that was not read: missing,
   oversized and unprintable. `numeric + other` always equals it.
+- `evidence` says what the column's numbers cover. `rowsComplete` is false when
+  a row of the file was never read, could not be read, or could not be aligned
+  to the header. `missingRateExact` adds that no value in this column was cut
+  short -- a value that was cut short was never compared with the missing
+  tokens, so it might have been one. `valuesComplete` adds that every value that
+  reached the profile could also be examined.
 - `numeric` is `null` for a categorical column -- there was no numeric question
   to answer -- and carries `verdict: "undetermined"` with a `reason` for a column
   that had one and could not support it. An undetermined verdict has **no**
   `outlierCount`: there is no count to report, so none is reported.
+- `verdict: "partial"` is the numeric counterpart of an incomplete category
+  index: a fence was placed and every value outside it is reported, but it was
+  computed from a subset of the column, so the **absence** of a value outside the
+  fence establishes nothing. It is reached whenever `evidence.valuesComplete` is
+  false, and every reason for that also raises a finding in the unsettled set --
+  so a partial verdict can never appear in a green run.
 - `fences` is filled under `iqr` and `null` under `mad`; `constant` the other way
   round. Each method reports what it actually used.
 - `categories.tracked` is `false` unless the baseline declares `allowed` or
