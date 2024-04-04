@@ -160,10 +160,24 @@ export function isUsableName(value, limit = MAX_NAME_LENGTH) {
  */
 export function num(value) {
   if (!Number.isFinite(value)) return null
+  // The guard above asks about the value this function was GIVEN. This one asks
+  // about the value it is about to produce, which is the same rule one line
+  // down: multiplying a finite value larger than about 1.8e302 by a million
+  // overflows to Infinity, `JSON.stringify` writes that as `null`, and the
+  // report carried null where a number belonged while the message printed
+  // "Infinity" for a row holding 1e307.
+  //
+  // Above this ceiling the product exceeds the range where a double has a
+  // fractional part at all, so rounding to six decimals cannot change the value
+  // and returning it unrounded is the same number, not a weaker one.
+  if (Math.abs(value) > ROUNDING_CEILING) return value
   const rounded = Math.round(value * 1000000) / 1000000
   if (rounded === 0 && value !== 0) return value
   return Object.is(rounded, -0) ? 0 : rounded
 }
+
+/** Where `value * 1000000` stops being a whole number a double can hold. */
+export const ROUNDING_CEILING = Number.MAX_SAFE_INTEGER / 1000000
 
 export const UNPARSEABLE = 'the document could not be parsed as JSON'
 

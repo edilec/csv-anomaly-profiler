@@ -27,6 +27,13 @@ public surface: renaming one is a breaking change and is recorded as such.
   member of the unsafe set still makes a value unprintable, and a column name
   still forgives none of them.
 
+- `num` guarded its input with `Number.isFinite` and then multiplied by a
+  million, so any finite value above about 1.8e302 was returned as `Infinity`.
+  `JSON.stringify` writes that as `null`, so a report carried `null` where a
+  number belonged and the message beside it read *"Row 22 of v holds Infinity"*
+  for a row holding 1e307. The check now asks about the value the rounding will
+  produce, and a value too large for the rounding to change is returned as it is.
+
 - A comparison made against a partially read file was reported as a comparison
   that was made. With the row bound stopping the read at 20 of 100 rows,
   `missingness-drift` was raised at error severity with a delta of 0.8 -- on a

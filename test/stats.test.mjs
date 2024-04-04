@@ -12,6 +12,7 @@ import test from 'node:test'
 
 import {
   MAD_CONSTANT,
+  ROUNDING_CEILING,
   num,
   asNumber,
   median,
@@ -99,4 +100,43 @@ test('rounding a report number never turns something into nothing', async () => 
   assert.ok(reading.numeric.dispersion > 0)
   assert.equal(reading.numeric.outlierCount, 0)
   assert.equal(report.status, 'pass')
+})
+
+test('rounding a report number never turns a number into nothing at the other end either', () => {
+  // The same rule as above, arriving from the other direction: the finite check
+  // asks about the INPUT and the rounding multiplies by a million, so a value
+  // over about 1.8e302 came back as Infinity -- which JSON writes as null.
+  assert.equal(num(1e307), 1e307)
+  assert.equal(num(-1e307), -1e307)
+  assert.equal(num(1.8e302), 1.8e302)
+  assert.equal(num(Number.MAX_VALUE), Number.MAX_VALUE)
+  assert.equal(Number.isFinite(num(1e307)), true)
+
+  // Both sides of the bound. At the ceiling the value is still rounded; one
+  // step past it the value is returned as it is, and either way it is a number.
+  assert.equal(num(ROUNDING_CEILING), Math.round(ROUNDING_CEILING * 1000000) / 1000000)
+  assert.equal(num(ROUNDING_CEILING * 2), ROUNDING_CEILING * 2)
+  assert.equal(num(ROUNDING_CEILING + 0.00000004), ROUNDING_CEILING)
+})
+
+test('a very large value reaches the report as a number, not as null beside the word Infinity', async () => {
+  const values = Array.from({ length: 20 }, (_, index) => 50 + (index % 3))
+  const report = await profileText(
+    csvText(['id', 'reading'], [...values, 1e307].map((value, index) => [`S-${index}`, value])),
+  )
+  const reading = columnNamed(report, 'reading')
+  assert.equal(reading.numeric.outlierCount, 1)
+  assert.equal(reading.numeric.examples[0].value, 1e307)
+  assert.ok(Number.isFinite(reading.numeric.examples[0].score))
+
+  const [finding] = report.findings.filter((entry) => entry.ruleId === 'numeric-outlier')
+  assert.ok(finding.message.includes('holds 1e+307'))
+  assert.equal(finding.message.includes('Infinity'), false)
+  // Not only the fields this test names: no number in the example arrives as
+  // null. `reason` and `fences` are null because there is nothing to report in
+  // them, which is a different thing.
+  assert.equal(JSON.stringify(reading.numeric.examples).includes('null'), false)
+  assert.ok(Number.isFinite(reading.numeric.median))
+  assert.ok(Number.isFinite(reading.numeric.dispersion))
+  assert.equal(report.status, 'fail')
 })
