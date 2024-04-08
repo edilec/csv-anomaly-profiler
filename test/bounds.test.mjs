@@ -337,13 +337,28 @@ test('maxExamples: exactly that many are listed without a note, one more adds on
   assert.equal(overLimit.status, 'fail')
 })
 
-test('a column entry shows exactly the top-category cap and no more', async () => {
+test('a column entry shows exactly the top-category cap, and says so when it shortens the list', async () => {
   const ten = Array.from({ length: MAX_TOP_CATEGORIES }, (_, index) => `v${index}`)
   const baseline = { columns: { id: {}, region: { allowed: [...ten, 'v10'] } } }
+
+  // At the cap: the whole index is listed and there is nothing to report.
   const atLimit = await profileText(categorical(ten), { baseline })
   assert.equal(columnNamed(atLimit, 'region').categories.top.length, MAX_TOP_CATEGORIES)
+  assert.equal(findingsFor(atLimit, 'examples-limited').length, 0)
+  assert.equal(atLimit.status, 'pass')
 
+  // One past it: the list is shortened, and the README's promise is that no
+  // limit shortens anything in silence. The COUNT stays exact, which is why
+  // this is information rather than a gap in the evidence.
   const overLimit = await profileText(categorical([...ten, 'v10']), { baseline })
-  assert.equal(columnNamed(overLimit, 'region').categories.distinct, MAX_TOP_CATEGORIES + 1)
-  assert.equal(columnNamed(overLimit, 'region').categories.top.length, MAX_TOP_CATEGORIES)
+  const region = columnNamed(overLimit, 'region')
+  assert.equal(region.categories.distinct, MAX_TOP_CATEGORIES + 1)
+  assert.equal(region.categories.top.length, MAX_TOP_CATEGORIES)
+  const limited = findingsFor(overLimit, 'examples-limited')
+  assert.equal(limited.length, 1)
+  assert.equal(limited[0].severity, 'info')
+  assert.ok(limited[0].message.includes(`${MAX_TOP_CATEGORIES + 1} distinct value or values`))
+  assert.ok(limited[0].message.includes('The count is exact'))
+  // Information, not a gap: the run still ends where it would have ended.
+  assert.equal(overLimit.status, 'pass')
 })

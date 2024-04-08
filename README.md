@@ -290,6 +290,16 @@ deviation puts it at a modified z-score of 3.12, inside the default threshold.
   round. Each method reports what it actually used.
 - `categories.tracked` is `false` unless the baseline declares `allowed` or
   `categories` for the column, and `reason` says which of the two reasons applies.
+- `categories.distinct` is how many values the index this run built holds, and
+  `categories.top` lists at most ten of them, most frequent first. When the list
+  is shortened `examples-limited` says so and the count stays exact. When
+  `categories.truncated` is true the index itself stopped short, so `distinct` is
+  a floor rather than the column's distinct count, and `categories-truncated`
+  makes the run incomplete.
+- `categories.notIndexed` is how many values were not added to the index at all:
+  too long to read, too long to index, not printable, or arriving after the
+  index reached `maxDistinctCategories`. `indexComplete` is false whenever it is
+  above zero or a row of the file was not profiled.
 - `values.reshaped` counts the values whose stored text differs from the text the
   report prints -- a whitespace difference and nothing else, since anything else
   is `value-unprintable` and is never examined.
@@ -318,7 +328,7 @@ deviation puts it at a modified z-score of 3.12, inside the default threshold.
 | `dispersion-degenerate` | warning | the deviation is zero, so no fence can be placed |
 | `drift-undetermined` | warning | the observed index dropped a value, so no distance is reported |
 | `duplicate-column` | error | the header uses one name twice |
-| `examples-limited` | info | more outliers or unexpected values than the report lists. The count stays exact |
+| `examples-limited` | info | more outliers, unexpected values or category values than the report lists. The count stays exact |
 | `field-too-long` | warning | a value is longer than `maxFieldLength` and was not read |
 | `header-column-unusable` | error | a header name would not print as it is stored, or is too long |
 | `missingness-above-threshold` | error | a column is missing more often than `maxMissingRate` |
@@ -393,7 +403,10 @@ characters, and a column entry shows at most 10 category values.
 Exceeding any limit is an `incomplete` result with a finding naming the limit. It
 is never a silent truncation and never a pass. The one exception is
 `examples-limited`, which is `info` because the **count** stays exact and only the
-listing is shortened.
+listing is shortened: that covers the outlier examples, the unexpected values a
+report names, and the ten category values a column entry shows. Each of the
+three still raises the finding -- shortening a list in silence is what this
+sentence exists to rule out.
 
 A category index is only built for a column the baseline declares `allowed` or
 `categories` for. A numeric column with twenty thousand distinct values would

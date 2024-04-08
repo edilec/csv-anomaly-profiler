@@ -552,6 +552,19 @@ function columnReport(column, config, baseline, file, rowsComplete) {
         unexpected: unexpected.slice(0, config.maxExamples),
         unexpectedCount: unexpected.length,
       }
+      if (categories.distinct > categories.top.length) {
+        // The same shape as a limited list of outliers, and reported the same
+        // way: the COUNT beside it is exact and only the listing is shortened.
+        // Shortening it in silence made the documented promise that no limit
+        // truncates quietly false, two paragraphs below the cap's own entry.
+        findings.push(makeFinding(
+          'examples-limited',
+          msg`${column.name} has ${String(categories.distinct)} distinct value or values in the index
+              this run built and this report lists ${String(categories.top.length)} of them, most
+              frequent first. The count is exact; only the listing is limited.`,
+          at(file, pointer),
+        ))
+      }
       if (column.reshaped > 0) {
         // A whitespace difference IS a difference and is reported -- but it is
         // reported as the difference it is. Indexing these values by their raw

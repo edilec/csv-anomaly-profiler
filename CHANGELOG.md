@@ -27,6 +27,12 @@ public surface: renaming one is a breaking change and is recorded as such.
   member of the unsafe set still makes a value unprintable, and a column name
   still forgives none of them.
 
+- The ten-entry cap on `categories.top` shortened the list with no finding, no
+  incompleteness and exit 0, while the README two paragraphs above the cap's own
+  entry said no limit is ever a silent truncation. It now raises
+  `examples-limited`, like the other two lists this report shortens, so the
+  sentence is true rather than corrected.
+
 - `num` guarded its input with `Number.isFinite` and then multiplied by a
   million, so any finite value above about 1.8e302 was returned as `Infinity`.
   `JSON.stringify` writes that as `null`, so a report carried `null` where a
