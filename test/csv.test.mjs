@@ -44,6 +44,23 @@ test('the ordinary shapes', () => {
   assert.deepEqual(parse('').rows, [])
 })
 
+test('a quoted line break is ordinary all the way through, not only in the reader', async () => {
+  // The reader parsing it is half a sentence. Listing the shape among the
+  // ORDINARY ones and leaving the other half unasserted is how it came to be
+  // counted `value-unprintable`, never examined, and exit 2 -- for the one
+  // thing RFC 4180 quoting exists for. The neighbouring test for the lone
+  // carriage return pins both halves; so does this one.
+  assert.deepEqual(parse('a,b\n"line1\nline2",2\n').rows[1].fields, ['line1\nline2', '2'])
+
+  const report = await profileText('id,note\nR-1,"line1\nline2"\nR-2,plain\n')
+  const note = columnNamed(report, 'note')
+  assert.equal(note.values.unprintable, 0)
+  assert.equal(note.values.examined, 2)
+  assert.equal(note.values.reshaped, 1)
+  assert.deepEqual(report.findings, [])
+  assert.equal(report.status, 'pass')
+})
+
 test('a trailing newline does not invent a final empty row, and a blank line is one empty field', () => {
   assert.equal(parse('a\n1\n').rows.length, 2)
   assert.equal(parse('a\n1\n\n').rows.length, 3)
