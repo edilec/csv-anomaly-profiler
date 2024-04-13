@@ -57,6 +57,12 @@ node bin/csv-anomaly-profiler.mjs --csv examples/incomplete/readings.csv
 `stdout` carries the JSON report and nothing else, so it pipes straight into a
 parser. The human summary goes to `stderr`, and `--json` silences it.
 
+If the consumer stops reading -- `| head` is the usual way -- the report did not
+arrive, which is an execution failure and not a verdict about the file: one line
+on stderr naming the stream and the error, and exit 2. No stack trace, because a
+stack trace carries the absolute path of this file and the report contract keeps
+host paths out of what this tool prints.
+
 ## Input: the file
 
 Comma separated, UTF-8, RFC 4180 quoting, first line the header. It is read in

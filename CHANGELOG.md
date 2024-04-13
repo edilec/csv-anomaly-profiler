@@ -27,6 +27,12 @@ public surface: renaming one is a breaking change and is recorded as such.
   member of the unsafe set still makes a value unprintable, and a column name
   still forgives none of them.
 
+- A consumer that stopped reading stdout -- `--json | head` -- crashed the tool:
+  the EPIPE was an unhandled `error` event, so Node printed a stack trace
+  carrying the absolute path of the binary, left a truncated document on stdout
+  and exited 1 as though a threshold had failed. A write failure is now one line
+  on stderr naming the stream and the error, and exit 2.
+
 - The ten-entry cap on `categories.top` shortened the list with no finding, no
   incompleteness and exit 0, while the README two paragraphs above the cap's own
   entry said no limit is ever a silent truncation. It now raises

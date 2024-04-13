@@ -92,6 +92,32 @@ function parseArguments(argv) {
   return options
 }
 
+/**
+ * Write to a stream and report whether it arrived.
+ *
+ * A stream this process does not own can fail: `--json | head` closes the pipe
+ * while the report is still going down it, and the write then emits EPIPE. With
+ * nothing listening for that, Node throws it as an unhandled 'error' event --
+ * which printed a stack trace carrying the ABSOLUTE path of this file, left
+ * stdout with a truncated document on it, and exited 1 as though a threshold
+ * had failed. The report contract forbids an absolute host path in the report;
+ * a crash trace is the same leak through another door.
+ *
+ * The listener is what stops the throw. The callback is what lets the caller
+ * say so honestly, because a report that did not arrive is an execution
+ * failure, not a verdict about the file.
+ */
+function writeTo(stream, text) {
+  return new Promise((resolve) => {
+    stream.write(text, (error) => resolve(error ?? null))
+  })
+}
+
+/** A write failure, said in one line, with no stack and no host path. */
+function describeWriteFailure(stream, error) {
+  return `The report was not written to ${stream}: ${sanitize(error.code ?? 'unknown error', 64)}.\n`
+}
+
 async function main(argv) {
   let options
   try {
@@ -123,9 +149,19 @@ async function main(argv) {
     return 2
   }
 
-  process.stdout.write(renderReport(report))
-  if (!options.json) process.stderr.write(formatSummary(report))
+  const failure = await writeTo(process.stdout, renderReport(report))
+  if (failure !== null) {
+    await writeTo(process.stderr, describeWriteFailure('stdout', failure))
+    return 2
+  }
+  if (!options.json) await writeTo(process.stderr, formatSummary(report))
   return exitCodeFor(report)
 }
+
+// Without these, a failed write to either stream is an unhandled 'error' event
+// and the process dies with a stack trace. Every path that writes checks the
+// outcome for itself; these only keep the failure from becoming a crash.
+process.stdout.on('error', () => {})
+process.stderr.on('error', () => {})
 
 process.exitCode = await main(process.argv.slice(2))

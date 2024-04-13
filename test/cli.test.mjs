@@ -9,10 +9,11 @@
  */
 
 import assert from 'node:assert/strict'
+import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 import test from 'node:test'
 
-import { EXAMPLES, runCli, withTempDir, writeJson, writeText } from './helpers.mjs'
+import { BIN, EXAMPLES, ROOT, runCli, withTempDir, writeJson, writeText } from './helpers.mjs'
 
 const CLEAN = join(EXAMPLES, 'clean', 'orders.csv')
 const CLEAN_BASELINE = join(EXAMPLES, 'clean', 'baseline.json')
@@ -176,6 +177,30 @@ test('a file path is never echoed back as an absolute host path', async () => {
   assert.equal(report.source.file, 'orders.csv')
   assert.equal(report.source.baseline, 'baseline.json')
   assert.equal(result.stdout.includes(EXAMPLES), false)
+})
+
+test('a consumer that stops reading gets one line, not a stack trace carrying this file path', async () => {
+  // `--json | head` closes the pipe while the report is still going down it.
+  // With nothing listening for the EPIPE, Node threw it as an unhandled error
+  // event: a stack trace on stderr carrying the ABSOLUTE path of the binary,
+  // a truncated document on stdout, and exit 1 as though a threshold had
+  // failed. The contract forbids an absolute host path in the report, and a
+  // crash trace is the same leak through another door.
+  const { code, stderr } = await new Promise((resolve) => {
+    const child = spawn(process.execPath, [BIN, '--csv', CLEAN, '--baseline', CLEAN_BASELINE, '--json'], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    child.stdout.destroy()
+    let collected = ''
+    child.stderr.on('data', (chunk) => { collected += chunk })
+    child.on('close', (exit) => resolve({ code: exit, stderr: collected }))
+  })
+
+  // A report that did not arrive is an execution failure, not a verdict.
+  assert.equal(code, 2)
+  assert.equal(stderr, 'The report was not written to stdout: EPIPE.\n')
+  assert.equal(stderr.includes(ROOT), false)
+  assert.equal(stderr.includes('    at '), false)
 })
 
 test('a directory given where a file belongs is refused, not read', async () => {
