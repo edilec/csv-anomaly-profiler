@@ -280,9 +280,14 @@ export function categoryIndexComplete(column, rowsComplete) {
 }
 
 export function unexpectedCategories(column, allowed) {
+  // A membership test per value against a list of up to four thousand entries
+  // is the work of the whole comparison multiplied by the size of the baseline,
+  // and both ends of that product are things a legal document may set. The set
+  // is built once.
+  const permitted = new Set(allowed)
   const unexpected = []
   for (const [value, count] of column.categories) {
-    if (!allowed.includes(value)) unexpected.push({ value, count })
+    if (!permitted.has(value)) unexpected.push({ value, count })
   }
   return unexpected.sort((a, b) => byCodeUnit(a.value, b.value))
 }

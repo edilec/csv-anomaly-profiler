@@ -92,11 +92,16 @@ function validateColumn(name, raw, limits) {
       )
     }
     const allowed = []
+    // A set, not a scan of the list so far: the list may hold as many entries as
+    // this run indexes, and checking each against every earlier one is that
+    // number squared for a document the tool calls legal.
+    const seen = new Set()
     for (const value of raw.allowed) {
       validateCategoryValue(value, `the "allowed" list for "${sanitize(name, 64)}"`, limits)
-      if (allowed.includes(value)) {
+      if (seen.has(value)) {
         refuse(`The baseline "allowed" list for "${sanitize(name, 64)}" lists "${sanitize(value, 64)}" twice.`)
       }
+      seen.add(value)
       allowed.push(value)
     }
     entry.allowed = allowed

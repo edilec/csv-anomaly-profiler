@@ -27,6 +27,16 @@ public surface: renaming one is a breaking change and is recorded as such.
   member of the unsafe set still makes a value unprintable, and a column name
   still forgives none of them.
 
+- A legal configuration made the work quadratic in two places and compiled a
+  regular expression once per value read. `hasUnsafeCharacter` built a fresh
+  pattern on every call -- two million of them at the documented maximum -- and
+  both the baseline's duplicate check and the unexpected-value comparison
+  scanned a list of up to `maxDistinctCategories` entries per value, which is
+  two independently configurable bounds multiplied together. The pattern is
+  hoisted and both scans are sets. A 200-row, 1024-column file against a
+  one-megabyte baseline went from 1.37s to 0.97s of CPU; the gap grows with both
+  bounds.
+
 - A consumer that stopped reading stdout -- `--json | head` -- crashed the tool:
   the EPIPE was an unhandled `error` event, so Node printed a stack trace
   carrying the absolute path of the binary, left a truncated document on stdout

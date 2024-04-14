@@ -45,9 +45,19 @@ export const LINE_SEPARATORS = '\u2028\u2029'
  */
 const UNSAFE_CHARACTERS = new RegExp(`[\\p{Cc}\\p{Cf}${LINE_SEPARATORS}]`, 'gu')
 
+/**
+ * The same class without the `g` flag, hoisted.
+ *
+ * `test` on a global pattern advances `lastIndex`, so this cannot be the same
+ * object as the one used for replacing -- and building a fresh one per call
+ * costs a regular-expression compile for every value in the file, which is two
+ * million of them at the documented maximum.
+ */
+const UNSAFE_CHARACTER = new RegExp(UNSAFE_CHARACTERS.source, 'u')
+
 /** Whether a string carries anything that would forge or hide text in a report. */
 export function hasUnsafeCharacter(value) {
-  return typeof value !== 'string' || new RegExp(UNSAFE_CHARACTERS.source, 'u').test(value)
+  return typeof value !== 'string' || UNSAFE_CHARACTER.test(value)
 }
 
 /**

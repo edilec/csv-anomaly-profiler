@@ -99,6 +99,31 @@ test('an unknown baseline key, and a distribution that does not sum to one, are 
   })
 })
 
+test('a baseline that lists one value twice is refused, however long the list is', async () => {
+  await withTempDir(async (directory) => {
+    const twice = await writeJson(directory, 'b3.json', {
+      schemaVersion: '1',
+      columns: { region: { allowed: ['north', 'south', 'north'] } },
+    })
+    const twiceRun = await runCli(['--csv', CLEAN, '--baseline', twice])
+    assert.equal(twiceRun.code, 2)
+    assert.equal(twiceRun.stdout, '')
+    assert.ok(twiceRun.stderr.includes('lists "north" twice'))
+
+    // The check is a set rather than a scan of the list so far, so it has to
+    // still refuse a duplicate at the far end of a long list.
+    const many = Array.from({ length: 500 }, (_, index) => `v${index}`)
+    const far = await writeJson(directory, 'b4.json', {
+      schemaVersion: '1',
+      columns: { region: { allowed: [...many, many[0]] } },
+    })
+    const farRun = await runCli(['--csv', CLEAN, '--baseline', far])
+    assert.equal(farRun.code, 2)
+    assert.equal(farRun.stdout, '')
+    assert.ok(farRun.stderr.includes('lists "v0" twice'))
+  })
+})
+
 test('--method is validated the same way the document is', async () => {
   const result = await runCli(['--csv', CLEAN, '--method', 'zscore'])
   assert.equal(result.code, 2)
