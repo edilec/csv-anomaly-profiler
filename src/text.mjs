@@ -241,6 +241,75 @@ export function parseFailureDetail(error) {
 }
 
 /**
+ * The keys a JSON document declares more than once inside one object.
+ *
+ * `JSON.parse` keeps the last of a repeated key and drops the rest without a
+ * word. A baseline that declares `region` twice therefore compares against half
+ * the policy its author wrote, and then asserts a positive `unexpected-category`
+ * over what survived -- evidence dropped while building the index, which is the
+ * one thing the index this tool compares against may never do. RFC 8259 leaves
+ * the behaviour to the implementation, so it has to be decided here rather than
+ * inherited.
+ *
+ * It is a scanner, not a parser: it needs the key names and the nesting, and
+ * nothing else. A string is the only place a brace, a colon or a comma can
+ * appear without meaning one, so tracking the string state is the whole job. A
+ * key is always the string immediately before a `:` inside an object.
+ *
+ * Call it only on text `JSON.parse` has already accepted. Every string it then
+ * reads is a valid JSON string, which is what makes unescaping one safe -- and
+ * unescaping is necessary, because `"a"` and `"a"` are one key to the
+ * parser and two different runs of source text here.
+ */
+export function duplicateKeys(text) {
+  const frames = []
+  const duplicates = []
+  let lastString = null
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index]
+    if (character === '"') {
+      let raw = ''
+      index += 1
+      while (index < text.length && text[index] !== '"') {
+        if (text[index] === '\\') {
+          raw += text[index]
+          index += 1
+          if (index < text.length) {
+            raw += text[index]
+            index += 1
+          }
+          continue
+        }
+        raw += text[index]
+        index += 1
+      }
+      lastString = raw.includes('\\') ? JSON.parse(`"${raw}"`) : raw
+      continue
+    }
+    if (character === '{') {
+      frames.push(new Set())
+      lastString = null
+    } else if (character === '[') {
+      frames.push(null)
+      lastString = null
+    } else if (character === '}' || character === ']') {
+      frames.pop()
+      lastString = null
+    } else if (character === ':') {
+      const frame = frames[frames.length - 1]
+      if (frame instanceof Set && lastString !== null) {
+        if (frame.has(lastString)) duplicates.push(lastString)
+        else frame.add(lastString)
+      }
+      lastString = null
+    } else if (character === ',') {
+      lastString = null
+    }
+  }
+  return duplicates
+}
+
+/**
  * Claims this tool is not entitled to make about its own work.
  *
  * It reads a delimited file and a baseline document. It runs a robust

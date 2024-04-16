@@ -27,6 +27,12 @@ public surface: renaming one is a breaking change and is recorded as such.
   member of the unsafe set still makes a value unprintable, and a column name
   still forgives none of them.
 
+- A key declared twice inside one object was dropped by `JSON.parse` without a
+  word, so a baseline declaring `region` twice compared against half the policy
+  its author wrote and then asserted a positive `unexpected-category` over what
+  survived. Both policy documents are now refused when a key is repeated, which
+  is the rule their entries were already held to: the index is whole or absent.
+
 - A legal configuration made the work quadratic in two places and compiled a
   regular expression once per value read. `hasUnsafeCharacter` built a fresh
   pattern on every call -- two million of them at the documented maximum -- and
@@ -94,7 +100,8 @@ public surface: renaming one is a breaking change and is recorded as such.
 
 - `category-whitespace-collapsed` (info), `blank-line-skipped` (info),
   `values.reshaped`, `summary.rowsBlank`, `summary.columnsPartial`,
-  `column.evidence`, the `partial` verdict and the `DRIFT_REASONS` vocabulary.
+  `column.evidence`, the `partial` verdict, the `DRIFT_REASONS` vocabulary and
+  `duplicateKeys`.
 
 ## 0.1.0
 

@@ -85,6 +85,7 @@ import {
   LINE_SEPARATORS,
   at,
   byCodeUnit,
+  duplicateKeys,
   isUsableName,
   msg,
   num,
@@ -291,11 +292,24 @@ async function readJsonPolicy(path, maxBytes, what) {
   } catch {
     throw new ConfigError(`The ${what} was not read: the bytes are not valid UTF-8.`)
   }
+  let document
   try {
-    return JSON.parse(text)
+    document = JSON.parse(text)
   } catch (error) {
     throw new ConfigError(`The ${what} is not valid JSON: ${parseFailureDetail(error)}.`)
   }
+  // A repeated key is an entry the parser dropped, and this document is the
+  // index every comparison is made against. Refusing it here is the same rule
+  // the entries themselves are held to: the index is whole or it is absent.
+  const repeated = duplicateKeys(text)
+  if (repeated.length > 0) {
+    throw new ConfigError(
+      `The ${what} repeats ${repeated.length} key or keys inside one object, the first being `
+      + `"${sanitize(repeated[0], 64)}". Only the last of a repeated key survives parsing, so the rest `
+      + `would be dropped without a word.`,
+    )
+  }
+  return document
 }
 
 export async function loadBaseline(baselinePath, config) {

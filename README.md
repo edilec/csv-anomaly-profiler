@@ -166,6 +166,13 @@ could not be used is refused when the document is read -- never dropped quietly.
 Evidence dropped while building an index makes every comparison against it
 incomplete; it does not make the comparison clean.
 
+A key declared twice inside one object is refused for the same reason, in the
+baseline and in the configuration alike. `JSON.parse` keeps the last of a
+repeated key and drops the rest without a word, and RFC 8259 leaves that to the
+implementation -- so a baseline declaring `region` twice would compare against
+half the policy its author wrote and then assert a positive finding over what
+survived.
+
 A column the baseline does not mention raises `baseline-entry-missing`, and a
 baseline column the file does not have raises `baseline-column-absent`. Both make
 the run incomplete: a comparison you asked for and did not get is a gap, not a

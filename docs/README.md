@@ -134,6 +134,28 @@ A header of exactly one column is the exception, and it is not a special case so
 much as the same rule: there an empty line IS a row whose single value is empty,
 and no other reading is available.
 
+## A key the parser dropped
+
+`JSON.parse` keeps the last of a repeated key and drops the rest in silence.
+RFC 8259 says names SHOULD be unique and leaves the rest to the implementation,
+so inheriting the default here means inheriting a decision nobody made.
+
+For this tool the decision is already written down one file over: the baseline
+is the index, and an entry that could not be used is refused when the document
+is read rather than dropped. A repeated key is an entry dropped by the parser
+before this tool ever sees it, which is the same hole reached earlier -- and the
+consequence is the sharp one: the run compares against half the policy and then
+asserts a positive `unexpected-category` over what survived.
+
+Finding it needs the source text, because the parser has already collapsed the
+duplicate by the time a reviver could look. `duplicateKeys` is a scanner rather
+than a parser: a key is the string immediately before a `:` inside an object,
+and a string is the only place a brace, a colon or a comma can appear without
+meaning one. It runs only on text `JSON.parse` has already accepted, which is
+what makes unescaping a key safe -- and unescaping is necessary, because
+`\u0061` and `a` are one key to the parser and two runs of source text to a
+scanner.
+
 ## Why the category index is conditional
 
 Only a column the baseline declares `allowed` or `categories` for is indexed. A

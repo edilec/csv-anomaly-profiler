@@ -9,10 +9,11 @@
  */
 
 import assert from 'node:assert/strict'
+import { join } from 'node:path'
 import test from 'node:test'
 
-import { UNPARSEABLE, parseFailureDetail } from '../src/index.mjs'
-import { csvText, runCli, withTempDir, writeText } from './helpers.mjs'
+import { UNPARSEABLE, duplicateKeys, parseFailureDetail } from '../src/index.mjs'
+import { EXAMPLES, csvText, runCli, withTempDir, writeText } from './helpers.mjs'
 
 function failureFor(text) {
   try {
@@ -100,5 +101,67 @@ test('an unparsable baseline is refused without being reproduced, with empty std
     assert.equal(result.stdout, '')
     assert.equal(result.stderr.includes('abc-not-a-real-secret'), false)
     assert.ok(result.stderr.includes("unexpected token 'o' at the start of the document"))
+  })
+})
+
+test('a key declared twice is found, wherever the braces and colons are', () => {
+  // `JSON.parse` keeps the last of a repeated key and drops the rest in
+  // silence, so the scanner has to see what the parser saw -- including that
+  // `\u0061` and `a` are one key, and that a brace, a colon or a comma inside a
+  // string is none of those things.
+  const cases = [
+    ['{"a":1,"a":2}', ['a']],
+    ['{"a":1,"b":2}', []],
+    ['{"a":{"x":1},"a":{"x":2}}', ['a']],
+    ['{"a":{"x":1,"x":2}}', ['x']],
+    // Two objects in an array are two objects, not one.
+    ['{"a":[{"x":1},{"x":2}]}', []],
+    // A key of the same name at a different depth is a different key.
+    ['{"outer":{"a":1},"a":2}', []],
+    ['{"a":1,"nested":{"a":1},"a":3}', ['a']],
+    // Braces, colons, commas and quotes inside strings are data.
+    ['{"a":"{\\"b\\":1,\\"b\\":2}"}', []],
+    ['{"a:b":1,"a:b":2}', ['a:b']],
+    ['{"a":"b,c","a":2}', ['a']],
+    ['{"a":"}\\"","a":2}', ['a']],
+    ['{"a\\\\":1,"a\\\\":2}', ['a\\']],
+    // One key, two spellings: the parser unescapes, so this does too.
+    ['{"\\u0061":1,"a":2}', ['a']],
+    ['  {  "a" : 1 , "a" : 2 }  ', ['a']],
+    ['{"a":1}', []],
+    ['[]', []],
+  ]
+  for (const [text, expected] of cases) {
+    JSON.parse(text)
+    assert.deepEqual(duplicateKeys(text), expected, text)
+  }
+})
+
+test('a policy document with a repeated key is refused, not silently halved', async () => {
+  await withTempDir(async (directory) => {
+    const csv = join(EXAMPLES, 'clean', 'orders.csv')
+
+    // The baseline is the index every comparison is made against. Parsing this
+    // one keeps only the second entry, so the run would compare against half
+    // the policy its author wrote and then assert a positive verdict over it.
+    const baseline = await writeText(directory, 'baseline.json',
+      '{"schemaVersion":"1","columns":{"region":{"allowed":["north"]},"region":{"allowed":["south"]}}}')
+    const baselineRun = await runCli(['--csv', csv, '--baseline', baseline, '--json'])
+    assert.equal(baselineRun.code, 2)
+    assert.equal(baselineRun.stdout, '')
+    assert.ok(baselineRun.stderr.includes('repeats 1 key or keys inside one object'))
+    assert.ok(baselineRun.stderr.includes('"region"'))
+
+    const config = await writeText(directory, 'config.json', '{"schemaVersion":"1","minSample":4,"minSample":9}')
+    const configRun = await runCli(['--csv', csv, '--config', config, '--json'])
+    assert.equal(configRun.code, 2)
+    assert.equal(configRun.stdout, '')
+    assert.ok(configRun.stderr.includes('"minSample"'))
+
+    // And a document with no repeated key is read exactly as before.
+    const fine = await writeText(directory, 'fine.json', '{"schemaVersion":"1","minSample":4}')
+    const fineRun = await runCli(['--csv', csv, '--config', fine, '--json'])
+    assert.equal(fineRun.code, 0)
+    assert.equal(JSON.parse(fineRun.stdout).configuration.minSample, 4)
   })
 })
