@@ -69,6 +69,13 @@ export const RULE_IDS = Object.freeze(Object.keys(RULE_SEVERITY).sort(byCodeUnit
  * `missingness-drift` and `category-drift` are deliberately absent: each is a
  * positive finding about evidence the run did obtain, which is a policy failure
  * and not a gap.
+ *
+ * The three `info` rules are absent for a different reason. `examples-limited`,
+ * `blank-line-skipped` and `category-whitespace-collapsed` each report
+ * something the run DID settle -- a list shortened with its count intact, a line
+ * holding nothing, a value compared as it prints -- so none of them leaves a
+ * question open. Every `warning` in the table is here; that is the invariant,
+ * and there is a test that drives it from the table rather than from this list.
  */
 export const UNSETTLED_RULES = Object.freeze([
   'baseline-column-absent',

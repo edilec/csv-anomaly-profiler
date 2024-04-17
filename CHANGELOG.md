@@ -27,6 +27,12 @@ public surface: renaming one is a breaking change and is recorded as such.
   member of the unsafe set still makes a value unprintable, and a column name
   still forgives none of them.
 
+- The set of characters a value may carry and still be examined was wider than
+  the set the documentation named: the vertical tab and the form feed were
+  treated as layout although only tab, line feed and carriage return were
+  documented as such. The code now matches the sentence, and a test draws the
+  line rather than a paragraph.
+
 - A key declared twice inside one object was dropped by `JSON.parse` without a
   word, so a baseline declaring `region` twice compared against half the policy
   its author wrote and then asserted a positive `unexpected-category` over what

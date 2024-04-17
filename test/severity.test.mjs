@@ -116,6 +116,20 @@ test('the severity table is the only place a severity is written down', () => {
   for (const ruleId of ['numeric-outlier', 'unexpected-category', 'missingness-above-threshold', 'missingness-drift', 'category-drift']) {
     assert.equal(marksUnsettled(ruleId), false, ruleId)
   }
+
+  // Driven from the table rather than from a list beside it: every warning is
+  // unsettled, and the rules that are not are exactly the five positive
+  // findings plus the three that report something the run did settle. A rule
+  // added as a warning and left out of the set would be a question that closes
+  // itself, which is the one thing severity alone cannot prevent.
+  const settled = RULE_IDS.filter((ruleId) => !marksUnsettled(ruleId))
+  for (const ruleId of RULE_IDS) {
+    if (RULE_SEVERITY[ruleId] === 'warning') assert.equal(marksUnsettled(ruleId), true, ruleId)
+  }
+  assert.deepEqual(settled.sort(), [
+    'blank-line-skipped', 'category-drift', 'category-whitespace-collapsed', 'examples-limited',
+    'missingness-above-threshold', 'missingness-drift', 'numeric-outlier', 'unexpected-category',
+  ])
 })
 
 test('a finding cannot be built with a raw string, and cannot be built for an unknown rule', () => {

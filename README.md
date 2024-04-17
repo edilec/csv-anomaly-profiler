@@ -117,8 +117,9 @@ indexed and compared by, on both sides of the comparison:
   `value-unprintable` and is not examined, exactly as a value carrying a hidden
   character is. It cannot be named in a report, so no claim is made about it.
 
-Tab, line feed and carriage return are **layout**, and a value carrying one is
-examined. RFC 4180 section 2.6 encloses a field containing a line break in
+Tab, line feed and carriage return are **layout** -- those three and nothing
+else, not the vertical tab or the form feed between them in the C0 block -- and a
+value carrying one is examined. RFC 4180 section 2.6 encloses a field containing a line break in
 double quotes -- it is the one thing quoting exists for -- so an export with
 multi-line notes must not be permanently `incomplete`. Collapsing the break to a
 space prints the value faithfully, and `values.reshaped` counts the values whose
@@ -359,7 +360,10 @@ Every warning above is in the unsettled set, so it produces `incomplete` and exi
 2 rather than a green run. The five positive findings -- `numeric-outlier`,
 `unexpected-category`, `missingness-above-threshold`, `missingness-drift` and
 `category-drift` -- are deliberately not: each is a statement about evidence the
-run did obtain, which is a policy failure and not a gap.
+run did obtain, which is a policy failure and not a gap. Nor are the three
+`info` rules, each of which reports something the run did settle: a list
+shortened with its count intact, a line holding nothing, a value compared as it
+prints.
 
 ## Exit codes
 
@@ -389,6 +393,14 @@ calls legal cannot exhaust memory:
 - `maxRows` multiplied by `maxColumns` may not exceed 2000000 retained values
 - `maxColumns` multiplied by `maxDistinctCategories` and `maxCategoryLength` may
   not exceed 33554432 retained characters
+
+Measured rather than asserted: the largest configuration these bounds permit --
+`maxRows` 1953, `maxColumns` 1024, `maxDistinctCategories` 4096,
+`maxCategoryLength` 8 -- over an 18 MB file of 1999872 cells, every value
+distinct and every column tracked against a baseline, used **398 MB of peak
+resident memory and 42 s of CPU** on one developer machine, and produced a 6.6 MB
+report. The figures are what one run on one machine did, not a promise; the
+bounds are the promise.
 
 | Limit | Default | Ceiling |
 | --- | ---: | ---: |

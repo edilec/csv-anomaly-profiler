@@ -63,18 +63,21 @@ export function hasUnsafeCharacter(value) {
 /**
  * The whitespace a VALUE may carry although the renderer replaces it.
  *
- * RFC 4180 section 2.6 permits a line break inside a quoted field -- it is the
- * reason quoting exists -- and a tab is ordinary text in an export. Both are
- * layout: collapsing them to a space prints the value faithfully, and refusing
- * them would report a defect on any export carrying a multi-line note.
+ * Exactly three characters, and the list is the list the README prints. RFC
+ * 4180 section 2, rule 6 encloses a field containing a line break in double
+ * quotes -- it is the reason quoting exists -- so LF and CR are layout, and a
+ * tab is ordinary text in an export. Collapsing any of the three to a space
+ * prints the value faithfully, and refusing them would report a defect on every
+ * export carrying a multi-line note.
  *
- * Nothing else in the unsafe set is layout. U+0085 and U+009B forge lines,
- * U+202E reverses displayed text, U+FEFF and the other format characters hide
- * it, and U+2028/U+2029 are line terminators inside a JavaScript string. None of
- * them is a character an exporter emits to lay a value out, so a value carrying
- * one still does not print as it is stored.
+ * Nothing else in the unsafe set is layout, including the other two C0
+ * whitespace characters: a vertical tab or a form feed in a delimited field is
+ * not something an exporter emits to lay a value out. U+0085 and U+009B forge
+ * lines, U+202E reverses displayed text, U+FEFF and the other format characters
+ * hide it, and U+2028/U+2029 are line terminators inside a JavaScript string. A
+ * value carrying any of them still does not print as it is stored.
  */
-const VALUE_WHITESPACE = /[\t\n\v\f\r]/gu
+const VALUE_WHITESPACE = /[\t\n\r]/gu
 
 /**
  * Whether a string carries something a report cannot print faithfully.

@@ -916,9 +916,10 @@ export async function profileCsv({ csv, config: configPath = null, baseline: bas
   }
 
   // Every data row in the file reached a column. A row past the limit was never
-  // read; a malformed or ragged row was read and could not be attributed. In
-  // all three cases what the columns hold is a subset of the file, and a rate
-  // or a fence computed from a subset describes the subset.
+  // read; a malformed row, a ragged row and the row left open by an unclosed
+  // quote were read and could not be attributed. In all four cases what the
+  // columns hold is a subset of the file, and a rate or a fence computed from a
+  // subset describes the subset.
   const rowsComplete = !state.truncated
     && state.malformed === 0
     && state.mismatched === 0

@@ -27,6 +27,8 @@ const CLASSES = Object.freeze([
   ['C0', String.fromCharCode(0x01)],
   ['C0 tab', String.fromCharCode(0x09)],
   ['C0 line feed', String.fromCharCode(0x0a)],
+  ['C0 vertical tab', String.fromCharCode(0x0b)],
+  ['C0 form feed', String.fromCharCode(0x0c)],
   ['C0 carriage return', String.fromCharCode(0x0d)],
   ['DEL', String.fromCharCode(0x7f)],
   ['C1 NEL', String.fromCharCode(0x85)],
@@ -48,6 +50,11 @@ const UNSAFE = new RegExp(`[\\p{Cc}\\p{Cf}${LINE_SEPARATORS}]`, 'u')
  *
  * A header is an identity and forgives none of them: two names printing the same
  * text would silently become one column.
+ *
+ * The vertical tab and the form feed sit between the three in the C0 block and
+ * are NOT layout: a delimited export does not emit either one to lay a value
+ * out. They are in the table so that the line between the two sets is drawn by a
+ * test rather than by a sentence.
  */
 const LAYOUT = new Set(['C0 tab', 'C0 line feed', 'C0 carriage return'])
 
