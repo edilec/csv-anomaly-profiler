@@ -200,8 +200,9 @@ export function createCsvReader({ maxFieldLength, maxColumns, onRow, onProblem }
 /**
  * Read a decoded text document through the reader in one go.
  *
- * Used by the tests and by the profiler's in-memory entry point; the streaming
- * entry point pushes chunks as they arrive.
+ * The profiler does not use it: it pushes chunks as they arrive, because the
+ * whole point of the reader is that a run holds one row at a time. This is for
+ * a caller with the text already in hand, and for the tests.
  */
 export function readCsvText(text, options) {
   const reader = createCsvReader(options)

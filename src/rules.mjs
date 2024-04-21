@@ -143,10 +143,16 @@ export function sortFindings(findings) {
   return [...findings].sort(compareFindings)
 }
 
-/** Status is a function of the findings alone. There is no flag to delete. */
+/**
+ * Status is a function of the findings alone. There is no flag to delete.
+ *
+ * It asks `marksUnsettled` rather than the set directly, so the function the
+ * tests interrogate is the function the exit code comes out of. A query beside
+ * a decision is two paths that can be edited apart.
+ */
 export function statusFor(findings) {
   for (const finding of findings) {
-    if (UNSETTLED_SET.has(finding.ruleId)) return 'incomplete'
+    if (marksUnsettled(finding.ruleId)) return 'incomplete'
   }
   for (const finding of findings) {
     if (finding.severity === 'error') return 'fail'
