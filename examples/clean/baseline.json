@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "1",
+  "source": "orders-week-11",
+  "columns": {
+    "order_ref": {},
+    "region": {
+      "missingRate": 0.0,
+      "allowed": [
+        "north",
+        "south",
+        "east"
+      ],
+      "categories": {
+        "north": 0.3333,
+        "south": 0.3333,
+        "east": 0.3334
+      }
+    },
+    "warehouse": {
+      "missingRate": 0.0,
+      "allowed": [
+        "LDN",
+        "MAN"
+      ],
+      "categories": {
+        "LDN": 0.5,
+        "MAN": 0.5
+      }
+    },
+    "units": {
+      "missingRate": 0.0
+    },
+    "unit_price": {
+      "missingRate": 0.0
+    }
+  }
+}
